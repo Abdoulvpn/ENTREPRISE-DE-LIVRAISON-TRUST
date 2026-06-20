@@ -334,17 +334,6 @@ table.td-table tr:hover td { background: #fafbff; }
 .td-login-card h1 { font-size: 22px; color: var(--td-blue-dark); margin-bottom: 4px; }
 .td-login-sub { color: var(--td-text-muted); font-size: 13.5px; margin-bottom: 20px; }
 .td-login-card form { text-align: left; }
-.td-login-demo {
-  margin-top: 22px;
-  padding-top: 16px;
-  border-top: 1px solid var(--td-border);
-  text-align: left;
-  font-size: 12.5px;
-  color: var(--td-text-muted);
-}
-.td-login-demo ul { padding-left: 18px; margin-bottom: 0; }
-.td-login-demo code { background: #f3f5fa; padding: 1px 5px; border-radius: 4px; }
-
 /* ---------- Misc ---------- */
 .td-muted { color: var(--td-text-muted); }
 .td-divider { border: none; border-top: 1px solid var(--td-border); margin: 20px 0; }

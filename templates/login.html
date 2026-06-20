@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Connexion — TrustDelivery{% endblock %}
+{% block title %}Connexion - TrustDelivery{% endblock %}
 {% block guest_content %}
 <div class="td-login-page">
   <div class="td-login-card">
@@ -16,20 +16,10 @@
       </div>
       <div class="mb-3">
         <label class="form-label">Mot de passe</label>
-        <input type="password" name="password" class="form-control" required placeholder="••••••••">
+        <input type="password" name="password" class="form-control" required placeholder="********">
       </div>
       <button type="submit" class="btn td-btn-primary w-100">Se connecter</button>
     </form>
-
-    <div class="td-login-demo">
-      <p>Comptes de démonstration (mot de passe : <code>Demo@2026</code>) :</p>
-      <ul>
-        <li><strong>Modérateur</strong> — moderateur@trustdelivery.com</li>
-        <li><strong>Agent de confirmation</strong> — agent@trustdelivery.com</li>
-        <li><strong>Livreur</strong> — livreur@trustdelivery.com</li>
-        <li><strong>Client</strong> — client@trustdelivery.com</li>
-      </ul>
-    </div>
   </div>
 </div>
 {% endblock %}
