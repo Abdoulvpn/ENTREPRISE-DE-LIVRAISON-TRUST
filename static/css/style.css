@@ -48,6 +48,10 @@ a { text-decoration: none; color: var(--td-blue); }
   height: 100vh;
 }
 
+.td-sidebar-overlay {
+  display: none;
+}
+
 .td-brand {
   padding: 22px 20px 16px;
   border-bottom: 1px solid rgba(255,255,255,0.12);
@@ -117,14 +121,44 @@ a { text-decoration: none; color: var(--td-blue); }
   top: 0;
   z-index: 10;
 }
+.td-topbar-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
 .td-topbar-title {
   font-family: 'Poppins', sans-serif;
   font-weight: 700;
   font-size: 19px;
   color: var(--td-blue-dark);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .td-topbar-user { display: flex; align-items: center; gap: 10px; }
 .td-user-name { font-weight: 600; font-size: 14px; }
+
+.td-menu-toggle {
+  display: none;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border: 1px solid var(--td-border);
+  border-radius: 10px;
+  background: #fff;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0;
+}
+.td-menu-toggle span {
+  display: block;
+  width: 19px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--td-blue-dark);
+}
 
 .td-role-badge {
   font-size: 11px;
@@ -323,8 +357,123 @@ table.td-table tr:hover td { background: #fafbff; }
 }
 
 @media (max-width: 880px) {
-  .td-sidebar { position: fixed; left: -260px; transition: left 0.2s ease; z-index: 50; }
+  body.td-menu-open {
+    overflow: hidden;
+  }
+
+  .td-shell {
+    display: block;
+    min-height: 100vh;
+  }
+
+  .td-sidebar {
+    position: fixed;
+    left: -280px;
+    transition: left 0.2s ease;
+    z-index: 60;
+    width: min(280px, 86vw);
+    box-shadow: 18px 0 40px rgba(16, 42, 86, 0.22);
+  }
   .td-sidebar.open { left: 0; }
+
+  .td-sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(16, 42, 86, 0.38);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .td-sidebar-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .td-menu-toggle {
+    display: inline-flex;
+  }
+
   .td-content { padding: 18px 16px 50px; }
-  .td-topbar { padding: 14px 16px; }
+
+  .td-topbar {
+    padding: 12px 14px;
+    gap: 12px;
+  }
+
+  .td-topbar-title {
+    font-size: 16px;
+    line-height: 1.25;
+  }
+
+  .td-topbar-user {
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .td-user-name {
+    display: none;
+  }
+
+  .td-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table.td-table {
+    min-width: 680px;
+  }
+
+  .td-card {
+    padding: 16px;
+  }
+
+  .td-section-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .td-product-row-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  body {
+    font-size: 14px;
+  }
+
+  .td-content {
+    padding: 14px 12px 44px;
+  }
+
+  .td-topbar {
+    align-items: flex-start;
+  }
+
+  .td-role-badge {
+    max-width: 132px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .td-kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .td-login-page {
+    padding: 16px;
+  }
+
+  .td-login-card {
+    border-radius: 14px;
+    padding: 28px 20px;
+  }
+
+  .td-login-logo {
+    max-width: 190px;
+  }
 }
