@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Commande {{ order.order_number }} — TrustDelivery{% endblock %}
+{% block page_title %}Commande {{ order.order_number }}{% endblock %}
+{% block content %}
+
+<a href="{{ url_for('orders.list_orders') }}" class="td-muted" style="font-size:13px;">← Retour à la liste</a>
+
+<div class="row g-3 mt-2">
+  <div class="col-lg-8">
+    <div class="td-card mb-3">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+          <h5 class="mb-1">{{ order.order_number }}</h5>
+          <span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[order.status] }}">{{ order.status }}</span>
+        </div>
+        <div class="text-end td-muted" style="font-size:13px;">
+          Créée le {{ order.created_at | dt }}
+        </div>
+      </div>
+
+      <div class="row mb-3">
+        <div class="col-6">
+          <p class="td-muted mb-1" style="font-size:12.5px;">CLIENT</p>
+          <p class="mb-0">{{ order.client_name }}<br><span class="td-muted">{{ order.client_email }}</span></p>
+        </div>
+        <div class="col-6">
+          <p class="td-muted mb-1" style="font-size:12.5px;">LIVRAISON</p>
+          <p class="mb-0">{{ order.zone_name or '—' }}<br><span class="td-muted">{{ order.delivery_address }}</span></p>
+        </div>
+      </div>
+
+      <table class="td-table mb-0">
+        <thead><tr><th>Produit</th><th>Qté</th><th>Prix unitaire</th><th>Total</th></tr></thead>
+        <tbody>
+        {% for it in items %}
+          <tr>
+            <td>{{ it.product_name }} <span class="td-muted">({{ it.sku }})</span></td>
+            <td>{{ it.quantity }}</td>
+            <td>{{ it.unit_price | money }}</td>
+            <td>{{ (it.unit_price * it.quantity) | money }}</td>
+          </tr>
+        {% endfor %}
+          <tr><td colspan="3" class="text-end"><strong>Sous-total</strong></td><td><strong>{{ order.total_amount | money }}</strong></td></tr>
+          <tr><td colspan="3" class="text-end">Frais de livraison</td><td>{{ order.delivery_fee | money }}</td></tr>
+          <tr><td colspan="3" class="text-end"><strong>Total</strong></td><td><strong>{{ (order.total_amount + order.delivery_fee) | money }}</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    {% if order.cancel_reason %}
+    <div class="alert alert-secondary">Motif d'annulation : {{ order.cancel_reason }}</div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-4">
+    <div class="td-card mb-3">
+      <h6 class="mb-3">Suivi</h6>
+      <p class="mb-1" style="font-size:13.5px;">Confirmée par : <strong>{{ order.confirmed_by_name or '—' }}</strong></p>
+      <p class="mb-1" style="font-size:13.5px;">Livreur assigné : <strong>{{ order.livreur_name or '—' }}</strong></p>
+      <p class="mb-0" style="font-size:13.5px;">Livrée le : <strong>{{ order.delivered_at | dt if order.delivered_at else '—' }}</strong></p>
+    </div>
+
+    <div class="td-card">
+      <h6 class="mb-3">Actions</h6>
+
+      {% if order.status == 'en_attente' and current_user.role in ['super_admin','moderateur','agent_confirmation'] %}
+        <form method="post" action="{{ url_for('orders.confirm_order', order_id=order.id) }}" class="mb-2">
+          <button type="submit" class="btn td-btn-primary w-100">✓ Confirmer la commande</button>
+        </form>
+      {% endif %}
+
+      {% if order.status == 'confirmee' and livreurs and current_user.role in ['super_admin','moderateur','agent_confirmation'] %}
+        <form method="post" action="{{ url_for('orders.assign_livreur', order_id=order.id) }}" class="mb-2">
+          <select name="livreur_id" class="form-select mb-2" required>
+            <option value="">— Choisir un livreur —</option>
+            {% for l in livreurs %}<option value="{{ l.id }}">{{ l.full_name }} ({{ l.zone or 'zone non définie' }})</option>{% endfor %}
+          </select>
+          <button type="submit" class="btn td-btn-accent w-100">Affecter le livreur</button>
+        </form>
+      {% endif %}
+
+      {% if current_user.role == 'livreur' and order.livreur_id == current_user.id %}
+        {% if order.status == 'affectee' %}
+          <form method="post" action="{{ url_for('orders.update_delivery_status', order_id=order.id) }}" class="mb-2">
+            <input type="hidden" name="new_status" value="en_livraison">
+            <button type="submit" class="btn td-btn-primary w-100">🚚 Démarrer la livraison</button>
+          </form>
+        {% elif order.status == 'en_livraison' %}
+          <form method="post" action="{{ url_for('orders.update_delivery_status', order_id=order.id) }}" class="mb-2">
+            <input type="hidden" name="new_status" value="livree">
+            <button type="submit" class="btn td-btn-primary w-100">✓ Marquer comme livrée</button>
+          </form>
+          <form method="post" action="{{ url_for('orders.update_delivery_status', order_id=order.id) }}" class="mb-2">
+            <input type="hidden" name="new_status" value="retournee">
+            <button type="submit" class="btn btn-outline-danger w-100" onclick="return confirm('Confirmer le retour de cette commande ?');">↩ Marquer comme retournée</button>
+          </form>
+        {% endif %}
+      {% endif %}
+
+      {% if order.status not in ['livree','annulee','retournee'] %}
+        {% if current_user.role in ['super_admin','moderateur','agent_confirmation'] or (current_user.role=='client' and order.status=='en_attente' and order.client_id==current_user.id) %}
+        <form method="post" action="{{ url_for('orders.cancel_order', order_id=order.id) }}" onsubmit="return confirm('Confirmer l\'annulation de cette commande ?');">
+          <input type="text" name="reason" class="form-control mb-2" placeholder="Motif d'annulation (optionnel)">
+          <button type="submit" class="btn btn-outline-danger w-100">Annuler la commande</button>
+        </form>
+        {% endif %}
+      {% endif %}
+
+      {% if invoice %}
+        <hr class="td-divider">
+        <a href="{{ url_for('invoices.invoice_detail', invoice_id=invoice.id) }}" class="btn td-btn-outline w-100">📄 Voir la facture {{ invoice.invoice_number }}</a>
+      {% endif %}
+
+      {% if order.status in ['livree','annulee','retournee'] and not invoice %}
+        <p class="td-muted mb-0" style="font-size:13px;">Aucune action disponible pour cette commande.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

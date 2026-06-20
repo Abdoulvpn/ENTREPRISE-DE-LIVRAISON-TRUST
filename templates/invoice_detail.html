@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Facture {{ invoice.invoice_number }} — TrustDelivery{% endblock %}
+{% block page_title %}Facture {{ invoice.invoice_number }}{% endblock %}
+{% block content %}
+
+<a href="{{ url_for('invoices.list_invoices') }}" class="td-muted" style="font-size:13px;">← Retour aux factures</a>
+
+<div class="td-card mt-2" style="max-width:640px;">
+  <div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+      <img src="{{ url_for('static', filename='img/logo.jpeg') }}" style="max-width:160px;">
+    </div>
+    <div class="text-end">
+      <h5 class="mb-1">{{ invoice.invoice_number }}</h5>
+      <span class="td-badge" style="background:{{ '#16a34a' if invoice.status=='payee' else '#dc2626' }}">{{ 'Payée' if invoice.status=='payee' else 'Impayée' }}</span>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-6">
+      <p class="td-muted mb-1" style="font-size:12.5px;">FACTURÉ À</p>
+      <p class="mb-0">{{ invoice.client_name }}<br><span class="td-muted">{{ invoice.client_email }}</span></p>
+    </div>
+    <div class="col-6 text-end">
+      <p class="td-muted mb-1" style="font-size:12.5px;">COMMANDE LIÉE</p>
+      <p class="mb-0">{{ invoice.order_number }}<br><span class="td-muted">{{ invoice.delivery_address }}</span></p>
+    </div>
+  </div>
+
+  <table class="td-table mb-3">
+    <thead><tr><th>Produit</th><th>Qté</th><th>Total</th></tr></thead>
+    <tbody>
+    {% for it in items %}
+      <tr><td>{{ it.product_name }}</td><td>{{ it.quantity }}</td><td>{{ (it.unit_price*it.quantity) | money }}</td></tr>
+    {% endfor %}
+      <tr><td colspan="2" class="text-end">Frais de livraison</td><td>{{ invoice.delivery_fee | money }}</td></tr>
+      <tr><td colspan="2" class="text-end"><strong>Total</strong></td><td><strong>{{ invoice.amount | money }}</strong></td></tr>
+    </tbody>
+  </table>
+
+  <p class="td-muted" style="font-size:13px;">Émise le {{ invoice.created_at | dt }}{% if invoice.paid_at %} · Payée le {{ invoice.paid_at | dt }}{% endif %}</p>
+
+  {% if invoice.status != 'payee' and current_user.role in ['super_admin','moderateur'] %}
+  <form method="post" action="{{ url_for('invoices.mark_paid', invoice_id=invoice.id) }}">
+    <button type="submit" class="btn td-btn-primary">Marquer comme payée</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

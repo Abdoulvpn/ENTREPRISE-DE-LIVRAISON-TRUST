@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Nouvelle commande — TrustDelivery{% endblock %}
+{% block page_title %}Nouvelle commande{% endblock %}
+{% block content %}
+
+<div class="td-card" style="max-width:700px;">
+  <form method="post">
+    {% if clients %}
+    <div class="mb-3">
+      <label class="form-label">Client</label>
+      <select name="client_id" class="form-select" required>
+        <option value="">— Sélectionner un client —</option>
+        {% for c in clients %}<option value="{{ c.id }}">{{ c.full_name }} ({{ c.email }})</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="row">
+      <div class="col-7 mb-3">
+        <label class="form-label">Zone de livraison</label>
+        <select name="zone_id" class="form-select" required>
+          <option value="">— Sélectionner une zone —</option>
+          {% for z in zones %}<option value="{{ z.id }}">{{ z.name }} ({{ z.delivery_fee | int }} GNF)</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Adresse de livraison</label>
+      <input type="text" name="delivery_address" class="form-control" required placeholder="Quartier, rue, repère...">
+    </div>
+
+    <hr class="td-divider">
+    <p class="td-muted" style="font-size:13px;">Articles de la commande</p>
+
+    <div id="items-container"></div>
+    <button type="button" id="add-item" class="btn td-btn-outline btn-sm mb-3">+ Ajouter un article</button>
+
+    <button type="submit" class="btn td-btn-primary">Créer la commande</button>
+    <a href="{{ url_for('orders.list_orders') }}" class="btn td-btn-outline ms-2">Annuler</a>
+  </form>
+</div>
+
+<template id="item-row-template">
+  <div class="td-product-row-grid item-row">
+    <select name="product_id" class="form-select" required>
+      <option value="">— Produit —</option>
+      {% for p in products %}<option value="{{ p.id }}">{{ p.name }} — {{ p.price | int }} GNF</option>{% endfor %}
+    </select>
+    <input type="number" name="quantity" min="1" value="1" class="form-control" placeholder="Qté" required>
+    <button type="button" class="btn btn-sm btn-outline-danger remove-item">✕</button>
+  </div>
+</template>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const container = document.getElementById('items-container');
+  const template = document.getElementById('item-row-template');
+
+  function addRow() {
+    const clone = template.content.cloneNode(true);
+    clone.querySelector('.remove-item').addEventListener('click', (e) => {
+      e.target.closest('.item-row').remove();
+    });
+    container.appendChild(clone);
+  }
+
+  document.getElementById('add-item').addEventListener('click', addRow);
+  addRow(); // une ligne par défaut
+</script>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord — TrustDelivery{% endblock %}
+{% block page_title %}Mes livraisons{% endblock %}
+{% block content %}
+
+<div class="td-kpi-grid">
+  <div class="td-kpi orange"><div class="td-kpi-label">À livrer maintenant</div><div class="td-kpi-value">{{ stats.a_livrer }}</div></div>
+  <div class="td-kpi green"><div class="td-kpi-label">Total livrées</div><div class="td-kpi-value">{{ stats.livrees_total }}</div></div>
+  <div class="td-kpi red"><div class="td-kpi-label">Retournées</div><div class="td-kpi-value">{{ stats.retournees }}</div></div>
+</div>
+
+<div class="td-section-title">Commandes assignées</div>
+<div class="td-table-wrap">
+  <table class="td-table">
+    <thead><tr><th>N°</th><th>Client</th><th>Statut</th><th>Adresse</th><th></th></tr></thead>
+    <tbody>
+    {% for o in deliveries %}
+      <tr>
+        <td>{{ o.order_number }}</td>
+        <td>{{ o.client_name }}</td>
+        <td><span class="td-badge" style="background:{{ '#6366f1' if o.status=='affectee' else '#0ea5e9' }}">{{ o.status }}</span></td>
+        <td>{{ o.delivery_address }}</td>
+        <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="td-btn-outline btn btn-sm">Gérer</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="td-empty">Aucune livraison assignée pour le moment.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

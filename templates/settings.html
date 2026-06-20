@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Paramètres — TrustDelivery{% endblock %}
+{% block page_title %}Paramètres &amp; Configuration{% endblock %}
+{% block content %}
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="td-section-title">Statuts des commandes</div>
+    <div class="td-card">
+      {% for s in statuses %}
+        <form method="post" action="{{ url_for('settings.update_status', status_key=s.status_key) }}" class="row align-items-center mb-2 g-2">
+          <div class="col-2"><code>{{ s.status_key }}</code></div>
+          <div class="col-5"><input type="text" name="label" value="{{ s.label }}" class="form-control form-control-sm" {{ 'disabled' if current_user.role!='super_admin' }}></div>
+          <div class="col-3"><input type="color" name="color" value="{{ s.color }}" class="form-control form-control-sm" {{ 'disabled' if current_user.role!='super_admin' }}></div>
+          <div class="col-2">
+            {% if current_user.role == 'super_admin' %}
+            <button type="submit" class="btn td-btn-outline btn-sm w-100">OK</button>
+            {% endif %}
+          </div>
+        </form>
+      {% endfor %}
+      {% if current_user.role != 'super_admin' %}
+        <p class="td-muted mt-2" style="font-size:12.5px;">Seul un Super Administrateur peut modifier les statuts.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="td-section-title">Zones de livraison</div>
+    <div class="td-card mb-3">
+      {% for z in zones %}
+        <form method="post" action="{{ url_for('settings.edit_zone', zone_id=z.id) }}" class="row align-items-center mb-2 g-2">
+          <div class="col-4"><input type="text" name="name" value="{{ z.name }}" class="form-control form-control-sm"></div>
+          <div class="col-4"><input type="text" name="region" value="{{ z.region or '' }}" class="form-control form-control-sm" placeholder="Région"></div>
+          <div class="col-3"><input type="number" name="delivery_fee" value="{{ z.delivery_fee | int }}" class="form-control form-control-sm"></div>
+          <div class="col-1"><button type="submit" class="btn td-btn-outline btn-sm">OK</button></div>
+        </form>
+      {% endfor %}
+    </div>
+    <div class="td-card">
+      <h6 class="mb-2">Ajouter une zone</h6>
+      <form method="post" action="{{ url_for('settings.create_zone') }}" class="row g-2">
+        <div class="col-4"><input type="text" name="name" class="form-control form-control-sm" placeholder="Nom de la zone" required></div>
+        <div class="col-4"><input type="text" name="region" class="form-control form-control-sm" placeholder="Région"></div>
+        <div class="col-3"><input type="number" name="delivery_fee" class="form-control form-control-sm" placeholder="Frais (GNF)"></div>
+        <div class="col-1"><button type="submit" class="btn td-btn-accent btn-sm">+</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-lg-6">
+    <div class="td-section-title">Entrepôts</div>
+    <div class="td-table-wrap">
+      <table class="td-table">
+        <thead><tr><th>Nom</th><th>Localisation</th></tr></thead>
+        <tbody>
+        {% for w in warehouses %}
+          <tr><td>{{ w.name }}</td><td>{{ w.location }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

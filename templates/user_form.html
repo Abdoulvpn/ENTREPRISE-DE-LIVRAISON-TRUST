@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Modifier' if user else 'Nouveau' }} utilisateur — TrustDelivery{% endblock %}
+{% block page_title %}{{ 'Modifier le compte' if user else 'Nouveau compte utilisateur' }}{% endblock %}
+{% block content %}
+
+<div class="td-card" style="max-width:560px;">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Nom complet</label>
+      <input type="text" name="full_name" class="form-control" required value="{{ user.full_name if user else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Adresse email</label>
+      <input type="email" name="email" class="form-control" {% if user %}value="{{ user.email }}" readonly{% endif %} required>
+    </div>
+    <div class="row">
+      <div class="col-6 mb-3">
+        <label class="form-label">Rôle</label>
+        <select name="role" class="form-select" required>
+          {% for key, label in roles.items() %}
+            <option value="{{ key }}" {{ 'selected' if user and user.role==key }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6 mb-3">
+        <label class="form-label">Téléphone</label>
+        <input type="text" name="phone" class="form-control" value="{{ user.phone if user else '' }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Zone / Ville</label>
+      <input type="text" name="zone" class="form-control" value="{{ user.zone if user else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">{{ 'Nouveau mot de passe (laisser vide pour ne pas changer)' if user else 'Mot de passe' }}</label>
+      <input type="password" name="password" class="form-control" {{ 'required' if not user }} placeholder="••••••••">
+    </div>
+    {% if user %}
+    <div class="mb-3 form-check">
+      <input type="checkbox" class="form-check-input" name="is_active" id="is_active" {{ 'checked' if user.is_active }}>
+      <label class="form-check-label" for="is_active">Compte actif</label>
+    </div>
+    {% endif %}
+    <button type="submit" class="btn td-btn-primary">{{ 'Enregistrer les modifications' if user else 'Créer le compte' }}</button>
+    <a href="{{ url_for('users.list_users') }}" class="btn td-btn-outline ms-2">Annuler</a>
+  </form>
+</div>
+{% endblock %}

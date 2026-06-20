@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Modifier' if product else 'Nouveau' }} produit — TrustDelivery{% endblock %}
+{% block page_title %}{{ 'Modifier le produit' if product else 'Nouveau produit' }}{% endblock %}
+{% block content %}
+
+<div class="td-card" style="max-width:620px;">
+  <form method="post">
+    <div class="row">
+      <div class="col-7 mb-3">
+        <label class="form-label">Nom du produit</label>
+        <input type="text" name="name" class="form-control" required value="{{ product.name if product else '' }}">
+      </div>
+      <div class="col-5 mb-3">
+        <label class="form-label">Référence (SKU)</label>
+        <input type="text" name="sku" class="form-control" required {% if product %}value="{{ product.sku }}" readonly{% endif %}>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea name="description" class="form-control" rows="2">{{ product.description if product else '' }}</textarea>
+    </div>
+    <div class="row">
+      <div class="col-4 mb-3">
+        <label class="form-label">Catégorie</label>
+        <input type="text" name="category" class="form-control" value="{{ product.category if product else '' }}">
+      </div>
+      <div class="col-4 mb-3">
+        <label class="form-label">Fournisseur</label>
+        <input type="text" name="supplier" class="form-control" value="{{ product.supplier if product else '' }}">
+      </div>
+      <div class="col-4 mb-3">
+        <label class="form-label">Prix unitaire (GNF)</label>
+        <input type="number" step="1" name="price" class="form-control" required value="{{ product.price if product else '' }}">
+      </div>
+    </div>
+
+    {% if not product %}
+    <hr class="td-divider">
+    <p class="td-muted" style="font-size:13px;">Stock initial</p>
+    <div class="row">
+      <div class="col-5 mb-3">
+        <label class="form-label">Entrepôt</label>
+        <select name="warehouse_id" class="form-select" required>
+          {% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-4 mb-3">
+        <label class="form-label">Quantité initiale</label>
+        <input type="number" min="0" name="initial_qty" class="form-control" value="0">
+      </div>
+      <div class="col-3 mb-3">
+        <label class="form-label">Seuil d'alerte</label>
+        <input type="number" min="0" name="alert_threshold" class="form-control" value="5">
+      </div>
+    </div>
+    {% endif %}
+
+    <button type="submit" class="btn td-btn-primary">{{ 'Enregistrer' if product else 'Créer le produit' }}</button>
+    <a href="{{ url_for('products.list_products') }}" class="btn td-btn-outline ms-2">Annuler</a>
+  </form>
+</div>
+{% endblock %}

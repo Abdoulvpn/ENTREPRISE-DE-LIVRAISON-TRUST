@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Stock — {{ product.name }}{% endblock %}
+{% block page_title %}Stock — {{ product.name }}{% endblock %}
+{% block content %}
+
+<a href="{{ url_for('products.list_products') }}" class="td-muted" style="font-size:13px;">← Retour au catalogue</a>
+
+<div class="row g-3 mt-2">
+  <div class="col-lg-7">
+    <div class="td-section-title">Mouvements de stock</div>
+    <div class="td-table-wrap">
+      <table class="td-table">
+        <thead><tr><th>Date</th><th>Entrepôt</th><th>Type</th><th>Quantité</th><th>Note</th><th>Par</th></tr></thead>
+        <tbody>
+        {% for m in movements %}
+          <tr>
+            <td>{{ m.created_at | dt }}</td>
+            <td>{{ m.warehouse_name }}</td>
+            <td>
+              {% if m.movement_type == 'entree' %}
+                <span class="td-badge" style="background:#16a34a;">Entrée</span>
+              {% else %}
+                <span class="td-badge" style="background:#dc2626;">Sortie</span>
+              {% endif %}
+            </td>
+            <td>{{ m.quantity }}</td>
+            <td class="td-muted">{{ m.note or '—' }}</td>
+            <td class="td-muted">{{ m.created_by_name or 'Système' }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="td-empty">Aucun mouvement enregistré.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="td-card mb-3">
+      <h6 class="mb-3">Niveaux de stock par entrepôt</h6>
+      {% for s in stock_levels %}
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span>{{ s.warehouse_name }}</span>
+          <strong>{{ s.quantity }}</strong>
+        </div>
+      {% else %}
+        <p class="td-muted">Aucun stock enregistré pour ce produit.</p>
+      {% endfor %}
+    </div>
+
+    <div class="td-card">
+      <h6 class="mb-3">Nouveau mouvement</h6>
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label">Entrepôt</label>
+          <select name="warehouse_id" class="form-select" required>
+            {% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Type de mouvement</label>
+          <select name="movement_type" class="form-select" required>
+            <option value="entree">Entrée (réception fournisseur)</option>
+            <option value="sortie">Sortie (ajustement manuel)</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Quantité</label>
+          <input type="number" min="1" name="quantity" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Note</label>
+          <input type="text" name="note" class="form-control" placeholder="Ex : Réception bon de livraison #245">
+        </div>
+        <button type="submit" class="btn td-btn-primary w-100">Enregistrer le mouvement</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

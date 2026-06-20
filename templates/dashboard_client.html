@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord — TrustDelivery{% endblock %}
+{% block page_title %}Bonjour, {{ current_user.full_name.split(' ')[0] }}{% endblock %}
+{% block content %}
+
+<div class="td-kpi-grid">
+  <div class="td-kpi"><div class="td-kpi-label">Mes commandes</div><div class="td-kpi-value">{{ stats.total_orders }}</div></div>
+  <div class="td-kpi orange"><div class="td-kpi-label">En cours</div><div class="td-kpi-value">{{ stats.en_cours }}</div></div>
+  <div class="td-kpi green"><div class="td-kpi-label">Livrées</div><div class="td-kpi-value">{{ stats.livrees }}</div></div>
+  <div class="td-kpi red"><div class="td-kpi-label">Factures impayées</div><div class="td-kpi-value">{{ stats.factures_impayees }}</div></div>
+</div>
+
+<div class="td-section-title">
+  <span>Mes dernières commandes</span>
+  <a href="{{ url_for('orders.create_order') }}" class="btn td-btn-accent btn-sm">+ Nouvelle commande</a>
+</div>
+<div class="td-table-wrap">
+  <table class="td-table">
+    <thead><tr><th>N°</th><th>Date</th><th>Statut</th><th>Montant</th><th></th></tr></thead>
+    <tbody>
+    {% for o in orders %}
+      <tr>
+        <td>{{ o.order_number }}</td>
+        <td>{{ o.created_at | dt }}</td>
+        <td><span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[o.status] }}">{{ o.status }}</span></td>
+        <td>{{ (o.total_amount + o.delivery_fee) | money }}</td>
+        <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="td-empty">Vous n'avez encore passé aucune commande.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="td-section-title">Mes factures récentes</div>
+<div class="td-table-wrap">
+  <table class="td-table">
+    <thead><tr><th>N° Facture</th><th>Montant</th><th>Statut</th><th></th></tr></thead>
+    <tbody>
+    {% for i in invoices %}
+      <tr>
+        <td>{{ i.invoice_number }}</td>
+        <td>{{ i.amount | money }}</td>
+        <td><span class="td-badge" style="background:{{ '#16a34a' if i.status=='payee' else '#dc2626' }}">{{ 'Payée' if i.status=='payee' else 'Impayée' }}</span></td>
+        <td><a href="{{ url_for('invoices.invoice_detail', invoice_id=i.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="td-empty">Aucune facture pour le moment.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

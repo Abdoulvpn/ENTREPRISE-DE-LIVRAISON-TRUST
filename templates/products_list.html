@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Produits — TrustDelivery{% endblock %}
+{% block page_title %}Produits &amp; Stock{% endblock %}
+{% block content %}
+
+<div class="td-section-title">
+  <span>{{ products | length }} produit(s)</span>
+  {% if current_user.role in ['super_admin','moderateur'] %}
+  <a href="{{ url_for('products.create_product') }}" class="btn td-btn-accent btn-sm">+ Nouveau produit</a>
+  {% endif %}
+</div>
+
+<form method="get" class="mb-3" style="max-width:320px;">
+  <input type="text" name="q" class="form-control" placeholder="Rechercher par nom ou référence..." value="{{ search }}">
+</form>
+
+<div class="td-table-wrap">
+  <table class="td-table">
+    <thead><tr><th>Produit</th><th>Référence</th><th>Catégorie</th><th>Prix</th><th>Stock total</th><th></th></tr></thead>
+    <tbody>
+    {% for p in products %}
+      <tr>
+        <td>{{ p.name }}</td>
+        <td>{{ p.sku }}</td>
+        <td>{{ p.category or '—' }}</td>
+        <td>{{ p.price | money }}</td>
+        <td>
+          {% if p.alert_threshold is not none and p.total_stock <= p.alert_threshold %}
+            <strong style="color:#dc2626;">{{ p.total_stock }}</strong> <span class="td-badge" style="background:#dc2626;">Rupture proche</span>
+          {% else %}
+            {{ p.total_stock }}
+          {% endif %}
+        </td>
+        <td>
+          {% if current_user.role in ['super_admin','moderateur'] %}
+            <a href="{{ url_for('products.edit_product', product_id=p.id) }}" class="td-btn-outline btn btn-sm">Modifier</a>
+            <a href="{{ url_for('products.stock_movements', product_id=p.id) }}" class="td-btn-outline btn btn-sm">Stock</a>
+          {% else %}
+            <span class="td-muted">Lecture seule</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="td-empty">Aucun produit trouvé.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

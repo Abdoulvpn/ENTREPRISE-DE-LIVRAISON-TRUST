@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Journal d'audit — TrustDelivery{% endblock %}
+{% block page_title %}Journal d'audit{% endblock %}
+{% block content %}
+
+<div class="td-table-wrap">
+  <table class="td-table">
+    <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Détails</th></tr></thead>
+    <tbody>
+    {% for log in logs %}
+      <tr>
+        <td class="td-muted">{{ log.created_at | dt }}</td>
+        <td>{{ log.user_name or 'Système' }}</td>
+        <td><strong>{{ log.action }}</strong></td>
+        <td class="td-muted">{{ log.details }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="td-empty">Aucune entrée dans le journal.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

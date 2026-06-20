@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Connexion — TrustDelivery{% endblock %}
+{% block guest_content %}
+<div class="td-login-page">
+  <div class="td-login-card">
+    <img src="{{ url_for('static', filename='img/logo.jpeg') }}" alt="TrustDelivery" class="td-login-logo">
+    <h1>Connexion</h1>
+    <p class="td-login-sub">Plateforme de gestion de livraison, stock &amp; commandes</p>
+
+    {% include '_flash.html' %}
+
+    <form method="post">
+      <div class="mb-3">
+        <label class="form-label">Adresse email professionnelle</label>
+        <input type="email" name="email" class="form-control" required autofocus placeholder="nom@trustdelivery.com">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Mot de passe</label>
+        <input type="password" name="password" class="form-control" required placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn td-btn-primary w-100">Se connecter</button>
+    </form>
+
+    <div class="td-login-demo">
+      <p>Comptes de démonstration (mot de passe : <code>Demo@2026</code>) :</p>
+      <ul>
+        <li><strong>Modérateur</strong> — moderateur@trustdelivery.com</li>
+        <li><strong>Agent de confirmation</strong> — agent@trustdelivery.com</li>
+        <li><strong>Livreur</strong> — livreur@trustdelivery.com</li>
+        <li><strong>Client</strong> — client@trustdelivery.com</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

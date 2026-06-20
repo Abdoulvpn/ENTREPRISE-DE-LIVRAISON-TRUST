@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Utilisateurs — TrustDelivery{% endblock %}
+{% block page_title %}Gestion des utilisateurs{% endblock %}
+{% block content %}
+
+<div class="td-section-title">
+  <span>{{ users | length }} compte(s)</span>
+  <a href="{{ url_for('users.create_user') }}" class="btn td-btn-accent btn-sm">+ Nouveau compte</a>
+</div>
+
+<form method="get" class="mb-3" style="max-width:260px;">
+  <select name="role" class="form-select" onchange="this.form.submit()">
+    <option value="">Tous les rôles</option>
+    {% for key, label in roles.items() %}
+      <option value="{{ key }}" {{ 'selected' if role_filter==key }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</form>
+
+<div class="td-table-wrap">
+  <table class="td-table">
+    <thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Téléphone</th><th>Statut</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.full_name }}</td>
+        <td>{{ u.email }}</td>
+        <td><span class="td-badge td-role-{{ u.role }}">{{ role_label(u.role) }}</span></td>
+        <td>{{ u.phone or '—' }}</td>
+        <td>
+          {% if u.is_active %}
+            <span class="td-badge" style="background:#16a34a;">Actif</span>
+          {% else %}
+            <span class="td-badge" style="background:#dc2626;">Suspendu</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="{{ url_for('users.edit_user', user_id=u.id) }}" class="td-btn-outline btn btn-sm">Modifier</a>
+          {% if current_user.role == 'super_admin' and u.id != current_user.id %}
+          <form method="post" action="{{ url_for('users.delete_user', user_id=u.id) }}" style="display:inline;" onsubmit="return confirm('Supprimer définitivement ce compte ?');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="td-empty">Aucun utilisateur trouvé.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord — TrustDelivery{% endblock %}
+{% block page_title %}Tableau de bord{% endblock %}
+{% block content %}
+
+<div class="td-kpi-grid">
+  <div class="td-kpi">
+    <div class="td-kpi-label">Commandes totales</div>
+    <div class="td-kpi-value">{{ stats.total_orders }}</div>
+  </div>
+  <div class="td-kpi orange">
+    <div class="td-kpi-label">En attente de confirmation</div>
+    <div class="td-kpi-value">{{ stats.en_attente }}</div>
+  </div>
+  <div class="td-kpi green">
+    <div class="td-kpi-label">Taux de confirmation</div>
+    <div class="td-kpi-value">{{ stats.taux_confirmation }}%</div>
+  </div>
+  <div class="td-kpi green">
+    <div class="td-kpi-label">Taux de livraison réussie</div>
+    <div class="td-kpi-value">{{ stats.taux_livraison }}%</div>
+  </div>
+  <div class="td-kpi red">
+    <div class="td-kpi-label">Taux de retour</div>
+    <div class="td-kpi-value">{{ stats.taux_retour }}%</div>
+  </div>
+  <div class="td-kpi">
+    <div class="td-kpi-label">Chiffre d'affaires (livré)</div>
+    <div class="td-kpi-value">{{ stats.ca_total | money }}</div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="td-card">
+      <h6 class="mb-3">Évolution du chiffre d'affaires (7 derniers jours)</h6>
+      <canvas id="caChart" height="110"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="td-card">
+      <h6 class="mb-3">Performance par zone</h6>
+      <div class="table-responsive">
+        <table class="td-table">
+          <thead><tr><th>Zone</th><th>Commandes</th><th>CA livré</th></tr></thead>
+          <tbody>
+          {% for z in perf_zone %}
+            <tr>
+              <td>{{ z.zone_name or 'Non définie' }}</td>
+              <td>{{ z.nb_commandes }}</td>
+              <td>{{ z.ca | money }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="td-empty">Aucune donnée pour le moment.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-lg-7">
+    <div class="td-section-title">
+      Commandes récentes
+      <a href="{{ url_for('orders.list_orders') }}" class="td-muted" style="font-size:13px;">Voir tout →</a>
+    </div>
+    <div class="td-table-wrap">
+      <table class="td-table">
+        <thead><tr><th>N°</th><th>Client</th><th>Statut</th><th>Montant</th><th></th></tr></thead>
+        <tbody>
+        {% for o in recent_orders %}
+          <tr>
+            <td>{{ o.order_number }}</td>
+            <td>{{ o.client_name }}</td>
+            <td><span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[o.status] }}">{{ o.status }}</span></td>
+            <td>{{ (o.total_amount + o.delivery_fee) | money }}</td>
+            <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="td-empty">Aucune commande pour le moment.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="td-section-title">Alertes de rupture de stock</div>
+    <div class="td-table-wrap">
+      <table class="td-table">
+        <thead><tr><th>Produit</th><th>Stock</th><th>Seuil</th></tr></thead>
+        <tbody>
+        {% for a in alerts_stock %}
+          <tr>
+            <td>{{ a.name }} <span class="td-muted">({{ a.sku }})</span></td>
+            <td><strong style="color:#dc2626;">{{ a.quantity }}</strong></td>
+            <td>{{ a.alert_threshold }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="3" class="td-empty">Aucune alerte. Les niveaux de stock sont sains.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  const chartData = {{ chart_data | safe }};
+  new Chart(document.getElementById('caChart'), {
+    type: 'line',
+    data: {
+      labels: chartData.days,
+      datasets: [{
+        label: 'CA (GNF)',
+        data: chartData.ca_per_day,
+        borderColor: '#1e4fd6',
+        backgroundColor: 'rgba(30,79,214,0.12)',
+        fill: true,
+        tension: 0.35,
+        pointBackgroundColor: '#f59e0b',
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+</script>
+{% endblock %}
