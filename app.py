@@ -77,4 +77,6 @@ if __name__ == "__main__":
     print("   Mot de passe : TrustDelivery@2026")
     print(" (Changez ce mot de passe après la première connexion.)")
     print("=" * 70)
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_ENV") != "production"
+    app.run(debug=debug, host="0.0.0.0", port=port)

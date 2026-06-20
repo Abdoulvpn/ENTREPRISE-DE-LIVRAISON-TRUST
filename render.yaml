@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: trustdelivery
+    runtime: python
+    runtimeVersion: 3.11
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+    disk:
+      name: trustdelivery-disk
+      mountPath: /var/data
+      sizeGB: 1
