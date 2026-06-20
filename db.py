@@ -10,7 +10,23 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "trustdelivery.db")
+# Allow overriding the database location via env var (Render persistent disk -> /var/data)
+default_db_path = os.environ.get("DATABASE_PATH")
+if not default_db_path:
+    if os.path.isdir("/var/data"):
+        default_db_path = os.path.join("/var/data", "trustdelivery.db")
+    else:
+        default_db_path = os.path.join(BASE_DIR, "trustdelivery.db")
+
+DB_PATH = default_db_path
+
+# Ensure the directory for the DB exists (useful when mounting persistent disk)
+db_dir = os.path.dirname(DB_PATH)
+if db_dir and not os.path.exists(db_dir):
+    try:
+        os.makedirs(db_dir, exist_ok=True)
+    except Exception:
+        pass
 
 ROLES = {
     "super_admin": "Super Administrateur",
