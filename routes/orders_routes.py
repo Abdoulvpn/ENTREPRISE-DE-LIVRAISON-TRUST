@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from datetime import datetime
 from db import get_db, log_action
 from auth import roles_required, login_required
+from integrations import send_order_notification, sync_shop_status
 
 bp = Blueprint("orders", __name__, url_prefix="/commandes")
 
@@ -461,7 +462,10 @@ def assign_livreur(order_id):
     conn = get_db()
     order = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
     livreur_id = request.form.get("livreur_id")
-    if not order or order["status"] != "confirmee" or not livreur_id:
+    livreur = conn.execute(
+        "SELECT id, full_name FROM users WHERE id=? AND role='livreur' AND is_active=1", (livreur_id,)
+    ).fetchone() if livreur_id else None
+    if not order or order["status"] != "confirmee" or not livreur:
         conn.close()
         flash("Affectation impossible : la commande doit être confirmée et un livreur sélectionné.", "danger")
         return redirect(url_for("orders.order_detail", order_id=order_id))
@@ -471,10 +475,12 @@ def assign_livreur(order_id):
         (livreur_id, order_id),
     )
     conn.commit()
-    livreur = conn.execute("SELECT full_name FROM users WHERE id=?", (livreur_id,)).fetchone()
     log_action(g.user, "Affectation livreur", f"{order['order_number']} -> {livreur['full_name']}")
     conn.close()
     flash(f"Commande affectée à {livreur['full_name']}.", "success")
+    notification_sent, notification_message = send_order_notification(order_id, "assigned", livreur["full_name"])
+    if not notification_sent:
+        flash(notification_message, "warning")
     return redirect(url_for("orders.order_detail", order_id=order_id))
 
 
@@ -526,6 +532,13 @@ def update_delivery_status(order_id):
     if pending_log:
         log_action(g.user, *pending_log)
     flash(*flash_msg)
+    if new_status == "livree":
+        notification_sent, notification_message = send_order_notification(order_id, "delivered")
+        if not notification_sent:
+            flash(notification_message, "warning")
+        sync_result, sync_message = sync_shop_status(order_id, "livree")
+        if sync_result is False:
+            flash(f"Livraison enregistrée, mais la boutique n’a pas été mise à jour : {sync_message}", "warning")
     return redirect(url_for("orders.order_detail", order_id=order_id))
 
 

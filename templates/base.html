@@ -47,6 +47,16 @@
         <i class="bi">▥</i> Catalogue &amp; Stock
       </a>
       {% endif %}
+      {% if current_user.role == 'client' %}
+      <a href="{{ url_for('products.list_products') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('products.') }}">
+        <i class="bi">▥</i> Mon stock
+      </a>
+      {% endif %}
+      {% if current_user.role in ['super_admin','moderateur','client'] %}
+      <a href="{{ url_for('shops.list_connections') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('shops.') }}">
+        <i class="bi">◈</i> Mes boutiques
+      </a>
+      {% endif %}
       <a href="{{ url_for('invoices.list_invoices') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('invoices.') }}">
         <i class="bi">▦</i> {{ 'Mes factures' if current_user.role=='client' else 'Facturation' }}
       </a>

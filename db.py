@@ -151,6 +151,8 @@ def init_db(reset=False):
             shop_name TEXT,
             shop_order_ref TEXT,
             shop_order_url TEXT,
+            shop_connection_id INTEGER REFERENCES shop_connections(id),
+            external_order_id TEXT,
             delivery_address TEXT,
             total_amount REAL NOT NULL DEFAULT 0,
             delivery_fee REAL NOT NULL DEFAULT 0,
@@ -181,6 +183,40 @@ def init_db(reset=False):
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             paid_at TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS shop_connections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL REFERENCES users(id),
+            platform TEXT NOT NULL,
+            shop_name TEXT NOT NULL,
+            webhook_token TEXT UNIQUE NOT NULL,
+            default_zone_id INTEGER NOT NULL REFERENCES zones(id),
+            store_url TEXT,
+            api_key TEXT,
+            api_secret TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS shop_sync_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            connection_id INTEGER NOT NULL REFERENCES shop_connections(id),
+            external_order_id TEXT,
+            status TEXT NOT NULL,
+            message TEXT,
+            order_id INTEGER REFERENCES orders(id),
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS notification_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL REFERENCES orders(id),
+            channel TEXT NOT NULL,
+            recipient TEXT,
+            status TEXT NOT NULL,
+            message TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         """
     )
     conn.commit()
@@ -208,9 +244,25 @@ def ensure_schema(conn):
         conn.execute("ALTER TABLE orders ADD COLUMN shop_order_ref TEXT")
     if "shop_order_url" not in columns:
         conn.execute("ALTER TABLE orders ADD COLUMN shop_order_url TEXT")
+    if "shop_connection_id" not in columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN shop_connection_id INTEGER REFERENCES shop_connections(id)")
+    if "external_order_id" not in columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN external_order_id TEXT")
     product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
     if "supplier_client_id" not in product_columns:
         conn.execute("ALTER TABLE products ADD COLUMN supplier_client_id INTEGER REFERENCES users(id)")
+    connection_columns = {row["name"] for row in conn.execute("PRAGMA table_info(shop_connections)").fetchall()}
+    if "store_url" not in connection_columns:
+        conn.execute("ALTER TABLE shop_connections ADD COLUMN store_url TEXT")
+    if "api_key" not in connection_columns:
+        conn.execute("ALTER TABLE shop_connections ADD COLUMN api_key TEXT")
+    if "api_secret" not in connection_columns:
+        conn.execute("ALTER TABLE shop_connections ADD COLUMN api_secret TEXT")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_shop_external "
+        "ON orders(shop_connection_id, external_order_id) "
+        "WHERE shop_connection_id IS NOT NULL AND external_order_id IS NOT NULL"
+    )
     conn.commit()
 
 

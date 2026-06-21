@@ -51,6 +51,10 @@ en production.
   alertes de rupture.
 - **Commandes** : création (client ou agent), confirmation, affectation à un livreur,
   suivi de statut, annulation, retour — avec réajustement automatique du stock.
+- **Boutiques connectées** : réception automatique des commandes Shopify, WooCommerce,
+  PrestaShop, Meta/WhatsApp ou API personnalisée, déduplication et rapprochement par SKU.
+- **Synchronisation WooCommerce** : retour automatique du statut `completed` après
+  livraison et notification SMS/WhatsApp du destinataire lors du dispatch.
 - **Livraisons** : interface dédiée au livreur pour démarrer/clôturer ses livraisons.
 - **Facturation** : génération automatique de la facture à la livraison, suivi des
   paiements, export comptable au format CSV.
@@ -74,3 +78,20 @@ en production.
   (ex. Gunicorn) derrière Nginx, avec HTTPS/SSL — voir le cahier des charges.
 - Si vous attendez un volume important d'utilisateurs/commandes simultanés, migrez la
   base SQLite vers PostgreSQL (la structure des requêtes reste très proche).
+
+## Configuration WooCommerce et notifications
+
+1. Dans **Mes boutiques**, créez la boutique WooCommerce et copiez l'URL webhook.
+2. Dans WooCommerce, créez un webhook sur l'événement de création de commande avec
+   cette URL de livraison.
+3. Créez une clé REST WooCommerce avec les droits lecture/écriture, puis renseignez
+   l'URL de la boutique, la clé `ck_...` et le secret `cs_...` dans TrustDelivery.
+4. Configurez l'un des canaux de notification suivants :
+
+   - `NOTIFICATION_WEBHOOK_URL` pour un fournisseur SMS/WhatsApp ou une automatisation ;
+   - `META_WHATSAPP_TOKEN` et `META_WHATSAPP_PHONE_NUMBER_ID` pour WhatsApp Cloud API ;
+   - `META_GRAPH_API_VERSION` permet de remplacer la version Graph utilisée par défaut.
+
+Le webhook de notification reçoit un JSON contenant `channel`, `to`, `message` et
+`order_id`. Une panne externe n'annule jamais une affectation ou une livraison : elle
+est enregistrée dans les journaux pour pouvoir être corrigée.

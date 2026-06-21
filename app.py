@@ -10,12 +10,13 @@ import db as db_module
 from auth import load_logged_in_user, role_label
 from db import ROLES
 
-from routes import auth_routes, dashboard_routes, users_routes, products_routes, orders_routes, invoices_routes, settings_routes
+from routes import auth_routes, dashboard_routes, users_routes, products_routes, orders_routes, invoices_routes, settings_routes, shop_routes
 
 
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "trustdelivery-dev-secret-change-me")
+    app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 
     db_module.init_db()
 
@@ -23,7 +24,7 @@ def create_app():
 
     @app.url_defaults
     def add_tab_id(endpoint, values):
-        if endpoint == "static" or "_tab" in values:
+        if endpoint in ("static", "shops.receive_webhook") or "_tab" in values:
             return
         tab_id = g.get("tab_id")
         if tab_id:
@@ -36,6 +37,7 @@ def create_app():
     app.register_blueprint(orders_routes.bp)
     app.register_blueprint(invoices_routes.bp)
     app.register_blueprint(settings_routes.bp)
+    app.register_blueprint(shop_routes.bp)
 
     @app.context_processor
     def inject_globals():
