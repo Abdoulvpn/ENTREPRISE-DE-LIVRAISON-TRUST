@@ -53,8 +53,9 @@ en production.
   suivi de statut, annulation, retour — avec réajustement automatique du stock.
 - **Boutiques connectées** : réception automatique des commandes Shopify, WooCommerce,
   PrestaShop, Meta/WhatsApp ou API personnalisée, déduplication et rapprochement par SKU.
-- **Synchronisation WooCommerce** : retour automatique du statut `completed` après
-  livraison et notification SMS/WhatsApp du destinataire lors du dispatch.
+- **Synchronisation des statuts** : WooCommerce passe à `completed`, Shopify à
+  `fulfilled`, et les autres plateformes reçoivent un callback universel `delivered`
+  après la livraison. Le destinataire est notifié par SMS/WhatsApp lors du dispatch.
 - **Livraisons** : interface dédiée au livreur pour démarrer/clôturer ses livraisons.
 - **Facturation** : génération automatique de la facture à la livraison, suivi des
   paiements, export comptable au format CSV.
@@ -79,7 +80,7 @@ en production.
 - Si vous attendez un volume important d'utilisateurs/commandes simultanés, migrez la
   base SQLite vers PostgreSQL (la structure des requêtes reste très proche).
 
-## Configuration WooCommerce et notifications
+## Configuration des boutiques et notifications
 
 1. Dans **Mes boutiques**, créez la boutique WooCommerce et copiez l'URL webhook.
 2. Dans WooCommerce, créez un webhook sur l'événement de création de commande avec
@@ -91,6 +92,27 @@ en production.
    - `NOTIFICATION_WEBHOOK_URL` pour un fournisseur SMS/WhatsApp ou une automatisation ;
    - `META_WHATSAPP_TOKEN` et `META_WHATSAPP_PHONE_NUMBER_ID` pour WhatsApp Cloud API ;
    - `META_GRAPH_API_VERSION` permet de remplacer la version Graph utilisée par défaut.
+
+Pour Shopify, renseignez l'URL de la boutique et placez le jeton Admin API dans le
+champ **Secret ou jeton API**. `SHOPIFY_API_VERSION` permet de choisir la version de
+l'Admin API ; la livraison crée automatiquement le fulfillment Shopify.
+
+Pour PrestaShop, Facebook/Instagram, WhatsApp et toute autre boutique, renseignez une
+URL **Callback de statut** fournie par le module de la boutique ou une automatisation
+Make, Zapier ou n8n. TrustDelivery lui envoie :
+
+```json
+{
+  "event": "order.delivered",
+  "status": "delivered",
+  "platform": "prestashop",
+  "external_order_id": "ABC-123",
+  "trustdelivery_order_id": 42
+}
+```
+
+Le callback reçoit aussi `Authorization: Bearer ...` et
+`X-TrustDelivery-Event: order.delivered` pour authentifier et router l'événement.
 
 Le webhook de notification reçoit un JSON contenant `channel`, `to`, `message` et
 `order_id`. Une panne externe n'annule jamais une affectation ou une livraison : elle

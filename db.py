@@ -194,6 +194,7 @@ def init_db(reset=False):
             store_url TEXT,
             api_key TEXT,
             api_secret TEXT,
+            status_callback_url TEXT,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -258,6 +259,8 @@ def ensure_schema(conn):
         conn.execute("ALTER TABLE shop_connections ADD COLUMN api_key TEXT")
     if "api_secret" not in connection_columns:
         conn.execute("ALTER TABLE shop_connections ADD COLUMN api_secret TEXT")
+    if "status_callback_url" not in connection_columns:
+        conn.execute("ALTER TABLE shop_connections ADD COLUMN status_callback_url TEXT")
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_shop_external "
         "ON orders(shop_connection_id, external_order_id) "

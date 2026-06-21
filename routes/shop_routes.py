@@ -155,17 +155,20 @@ def list_connections():
         store_url = text(request.form.get("store_url"))
         api_key = text(request.form.get("api_key"))
         api_secret = text(request.form.get("api_secret"))
+        status_callback_url = text(request.form.get("status_callback_url"))
         client = conn.execute("SELECT id FROM users WHERE id=? AND role='client' AND is_active=1", (client_id,)).fetchone()
         zone = conn.execute("SELECT id FROM zones WHERE id=?", (zone_id,)).fetchone()
         if not client or platform not in PLATFORMS or not shop_name or not zone:
             flash("Veuillez renseigner une boutique, sa plateforme et sa zone par défaut.", "danger")
         elif not valid_store_url(store_url):
             flash("L’URL de la boutique doit être une adresse HTTPS publique valide.", "danger")
+        elif not valid_store_url(status_callback_url):
+            flash("L’URL de retour du statut doit être une adresse HTTPS publique valide.", "danger")
         else:
             conn.execute(
-                "INSERT INTO shop_connections (client_id, platform, shop_name, webhook_token, default_zone_id, store_url, api_key, api_secret) "
-                "VALUES (?,?,?,?,?,?,?,?)",
-                (client_id, platform, shop_name, secrets.token_urlsafe(32), zone_id, store_url, api_key, api_secret),
+                "INSERT INTO shop_connections (client_id, platform, shop_name, webhook_token, default_zone_id, "
+                "store_url, api_key, api_secret, status_callback_url) VALUES (?,?,?,?,?,?,?,?,?)",
+                (client_id, platform, shop_name, secrets.token_urlsafe(32), zone_id, store_url, api_key, api_secret, status_callback_url),
             )
             conn.commit()
             log_action(g.user, "Connexion boutique", f"{shop_name} ({platform})")
@@ -239,14 +242,19 @@ def update_api_credentials(connection_id):
     store_url = text(request.form.get("store_url"))
     api_key = text(request.form.get("api_key"))
     api_secret = text(request.form.get("api_secret"))
-    if connection["platform"] == "woocommerce" and not valid_store_url(store_url):
+    status_callback_url = text(request.form.get("status_callback_url"))
+    if store_url and not valid_store_url(store_url):
         conn.close()
-        flash("L’URL WooCommerce doit être une adresse HTTPS publique valide.", "danger")
+        flash("L’URL de la boutique doit être une adresse HTTPS publique valide.", "danger")
+        return redirect(url_for("shops.list_connections"))
+    if status_callback_url and not valid_store_url(status_callback_url):
+        conn.close()
+        flash("L’URL de retour du statut doit être une adresse HTTPS publique valide.", "danger")
         return redirect(url_for("shops.list_connections"))
     conn.execute(
         "UPDATE shop_connections SET store_url=?, api_key=CASE WHEN ?='' THEN api_key ELSE ? END, "
-        "api_secret=CASE WHEN ?='' THEN api_secret ELSE ? END WHERE id=?",
-        (store_url, api_key, api_key, api_secret, api_secret, connection_id),
+        "api_secret=CASE WHEN ?='' THEN api_secret ELSE ? END, status_callback_url=? WHERE id=?",
+        (store_url, api_key, api_key, api_secret, api_secret, status_callback_url, connection_id),
     )
     conn.commit()
     conn.close()

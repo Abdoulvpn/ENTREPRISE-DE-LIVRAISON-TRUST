@@ -287,6 +287,64 @@ class ClientIsolationTests(unittest.TestCase):
         self.assertEqual(sent_request.full_url, "https://shop.example/wp-json/wc/v3/orders/991")
         self.assertEqual(sent_request.data, b'{"status": "completed"}')
 
+    def test_shopify_order_is_fulfilled(self):
+        conn = get_db()
+        connection_id = conn.execute(
+            "INSERT INTO shop_connections (client_id, platform, shop_name, webhook_token, default_zone_id, store_url, api_secret) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (self.first_client_id, "shopify", "Shopify Test", "shopify-status-token", self.zone_id, "https://shopify.example", "shpat_test"),
+        ).lastrowid
+        order_id = conn.execute(
+            "INSERT INTO orders (order_number, client_id, zone_id, shop_connection_id, external_order_id) VALUES (?,?,?,?,?)",
+            ("CMD-SHOPIFY-SYNC", self.first_client_id, self.zone_id, connection_id, "7788"),
+        ).lastrowid
+        conn.commit()
+        conn.close()
+
+        get_response = MagicMock()
+        get_response.__enter__.return_value = get_response
+        get_response.read.return_value = b'{"fulfillment_orders":[{"id":55,"status":"open"}]}'
+        post_response = MagicMock()
+        post_response.__enter__.return_value = post_response
+        post_response.read.return_value = b'{"fulfillment":{"id":66}}'
+        with patch("integrations.urlopen", side_effect=[get_response, post_response]) as request_mock:
+            success, message = sync_shop_status(order_id, "livree")
+        self.assertTrue(success)
+        self.assertIn("fulfilled", message)
+        self.assertIn("/fulfillment_orders.json", request_mock.call_args_list[0].args[0].full_url)
+        self.assertIn("/fulfillments.json", request_mock.call_args_list[1].args[0].full_url)
+
+    def test_other_platforms_receive_universal_delivered_callback(self):
+        conn = get_db()
+        orders = []
+        for index, platform in enumerate(("prestashop", "facebook", "whatsapp", "custom"), start=1):
+            connection_id = conn.execute(
+                "INSERT INTO shop_connections (client_id, platform, shop_name, webhook_token, default_zone_id, status_callback_url) "
+                "VALUES (?,?,?,?,?,?)",
+                (self.first_client_id, platform, f"{platform} Test", f"{platform}-status-token", self.zone_id, "https://automation.example/status"),
+            ).lastrowid
+            order_id = conn.execute(
+                "INSERT INTO orders (order_number, client_id, zone_id, shop_connection_id, external_order_id) VALUES (?,?,?,?,?)",
+                (f"CMD-STATUS-{index}", self.first_client_id, self.zone_id, connection_id, f"EXT-{index}"),
+            ).lastrowid
+            orders.append((platform, order_id))
+        conn.commit()
+        conn.close()
+
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = b"{}"
+        with patch("integrations.urlopen", return_value=response) as request_mock:
+            for platform, order_id in orders:
+                with self.subTest(platform=platform):
+                    success, message = sync_shop_status(order_id, "livree")
+                    self.assertTrue(success)
+                    self.assertIn(platform, message)
+        self.assertEqual(request_mock.call_count, 4)
+        for call in request_mock.call_args_list:
+            payload = call.args[0].data.decode("utf-8")
+            self.assertIn('"status": "delivered"', payload)
+
     def test_delivery_triggers_store_status_sync(self):
         conn = get_db()
         conn.execute("UPDATE orders SET livreur_id=? WHERE id=?", (self.courier_id, self.woo_order_id))

@@ -41,6 +41,64 @@ def post_json(url, payload, headers=None, method="POST", timeout=8):
         return json.loads(body) if body else {}
 
 
+def get_json(url, headers=None, timeout=8):
+    request = Request(url, headers={"Accept": "application/json", **(headers or {})}, method="GET")
+    with urlopen(request, timeout=timeout) as response:
+        body = response.read().decode("utf-8")
+        return json.loads(body) if body else {}
+
+
+def record_sync_event(conn, row, order_id, success, message):
+    conn.execute(
+        "INSERT INTO shop_sync_events (connection_id, external_order_id, status, message, order_id) VALUES (?,?,?,?,?)",
+        (row["shop_connection_id"], row["external_order_id"], "success" if success else "error", message[:500], order_id),
+    )
+
+
+def sync_woocommerce(row):
+    endpoint = f"{row['store_url'].rstrip('/')}/wp-json/wc/v3/orders/{quote(str(row['external_order_id']))}"
+    credentials = base64.b64encode(f"{row['api_key']}:{row['api_secret']}".encode()).decode()
+    post_json(endpoint, {"status": "completed"}, {"Authorization": f"Basic {credentials}"}, method="PUT")
+    return "Statut WooCommerce mis à jour : completed"
+
+
+def sync_shopify(row):
+    api_version = os.environ.get("SHOPIFY_API_VERSION", "2026-04")
+    base_url = row["store_url"].rstrip("/")
+    order_id = quote(str(row["external_order_id"]))
+    headers = {"X-Shopify-Access-Token": row["api_secret"]}
+    data = get_json(f"{base_url}/admin/api/{api_version}/orders/{order_id}/fulfillment_orders.json", headers)
+    fulfillment_orders = [
+        {"fulfillment_order_id": item["id"]}
+        for item in data.get("fulfillment_orders", [])
+        if item.get("id") and item.get("status") in ("open", "in_progress")
+    ]
+    if not fulfillment_orders:
+        return "Commande Shopify déjà traitée ou sans expédition ouverte"
+    post_json(
+        f"{base_url}/admin/api/{api_version}/fulfillments.json",
+        {"fulfillment": {"line_items_by_fulfillment_order": fulfillment_orders, "notify_customer": True}},
+        headers,
+    )
+    return "Commande Shopify marquée comme fulfilled"
+
+
+def sync_universal_callback(row, order_id):
+    token = row["api_secret"] or row["webhook_token"]
+    post_json(
+        row["status_callback_url"],
+        {
+            "event": "order.delivered",
+            "status": "delivered",
+            "platform": row["platform"],
+            "external_order_id": row["external_order_id"],
+            "trustdelivery_order_id": order_id,
+        },
+        {"Authorization": f"Bearer {token}", "X-TrustDelivery-Event": "order.delivered"},
+    )
+    return f"Statut livré envoyé vers {row['platform']}"
+
+
 def log_notification(order_id, channel, recipient, status, message):
     conn = get_db()
     conn.execute(
@@ -103,40 +161,29 @@ def sync_shop_status(order_id, status):
     if not row:
         conn.close()
         return None, "Commande sans boutique connectée."
-    if row["platform"] != "woocommerce" or status != "livree":
+    if status != "livree":
         conn.close()
-        return None, "Retour de statut non requis pour cette plateforme."
-    if not row["store_url"] or not row["api_key"] or not row["api_secret"]:
-        message = "Identifiants API WooCommerce manquants"
-        conn.execute(
-            "INSERT INTO shop_sync_events (connection_id, external_order_id, status, message, order_id) VALUES (?,?,?,?,?)",
-            (row["shop_connection_id"], row["external_order_id"], "error", message, order_id),
-        )
-        conn.commit()
-        conn.close()
-        return False, message
-    if not valid_store_url(row["store_url"]):
-        message = "URL WooCommerce non sécurisée ou invalide"
-        conn.execute(
-            "INSERT INTO shop_sync_events (connection_id, external_order_id, status, message, order_id) VALUES (?,?,?,?,?)",
-            (row["shop_connection_id"], row["external_order_id"], "error", message, order_id),
-        )
-        conn.commit()
-        conn.close()
-        return False, message
-
-    endpoint = f"{row['store_url'].rstrip('/')}/wp-json/wc/v3/orders/{quote(str(row['external_order_id']))}"
-    credentials = base64.b64encode(f"{row['api_key']}:{row['api_secret']}".encode()).decode()
+        return None, "Retour de statut non requis."
     try:
-        post_json(endpoint, {"status": "completed"}, {"Authorization": f"Basic {credentials}"}, method="PUT")
-        success, message = True, "Statut WooCommerce mis à jour : completed"
+        if row["platform"] == "woocommerce" and row["store_url"] and row["api_key"] and row["api_secret"]:
+            if not valid_store_url(row["store_url"]):
+                raise ValueError("URL WooCommerce non sécurisée ou invalide")
+            message = sync_woocommerce(row)
+        elif row["platform"] == "shopify" and row["store_url"] and row["api_secret"]:
+            if not valid_store_url(row["store_url"]):
+                raise ValueError("URL Shopify non sécurisée ou invalide")
+            message = sync_shopify(row)
+        elif row["status_callback_url"]:
+            if not valid_store_url(row["status_callback_url"]):
+                raise ValueError("Callback de statut non sécurisé ou invalide")
+            message = sync_universal_callback(row, order_id)
+        else:
+            raise ValueError(f"Retour de statut {row['platform']} non configuré")
+        success = True
     except (HTTPError, URLError, OSError, ValueError) as exc:
-        success, message = False, f"Échec WooCommerce : {exc}"
+        success, message = False, f"Échec {row['platform']} : {exc}"
 
-    conn.execute(
-        "INSERT INTO shop_sync_events (connection_id, external_order_id, status, message, order_id) VALUES (?,?,?,?,?)",
-        (row["shop_connection_id"], row["external_order_id"], "success" if success else "error", message, order_id),
-    )
+    record_sync_event(conn, row, order_id, success, message)
     conn.commit()
     conn.close()
     return success, message
