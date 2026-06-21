@@ -42,6 +42,35 @@
     </div>
 
     <hr class="td-divider">
+    <p class="td-muted" style="font-size:13px;">Lien boutique (optionnel)</p>
+
+    <div class="row">
+      <div class="col-md-5 mb-3">
+        <label class="form-label">Plateforme</label>
+        <select name="shop_platform" class="form-select">
+          {% for value, label in shop_platforms.items() %}
+            <option value="{{ value }}">{{ label or 'Aucune boutique' }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-7 mb-3">
+        <label class="form-label">Nom de la boutique</label>
+        <input type="text" name="shop_name" class="form-control" placeholder="Ex: Boutique Shopify Kankan">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-5 mb-3">
+        <label class="form-label">Reference commande boutique</label>
+        <input type="text" name="shop_order_ref" class="form-control" placeholder="Ex: #1024">
+      </div>
+      <div class="col-md-7 mb-3">
+        <label class="form-label">Lien commande boutique</label>
+        <input type="url" name="shop_order_url" class="form-control" placeholder="https://...">
+      </div>
+    </div>
+
+    <hr class="td-divider">
     <p class="td-muted" style="font-size:13px;">Articles de la commande</p>
 
     <div id="items-container"></div>

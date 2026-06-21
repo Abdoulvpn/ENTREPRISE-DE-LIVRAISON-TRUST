@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Commandes — TrustDelivery{% endblock %}
+{% block title %}Commandes - TrustDelivery{% endblock %}
 {% block page_title %}{{ 'Mes commandes' if current_user.role=='client' else ('Mes livraisons' if current_user.role=='livreur' else 'Commandes') }}{% endblock %}
 {% block content %}
 
@@ -29,7 +29,12 @@
         <th>N°</th>
         {% if current_user.role != 'client' %}<th>Client</th>{% endif %}
         {% if current_user.role != 'livreur' %}<th>Livreur</th>{% endif %}
-        <th>Zone</th><th>Statut</th><th>Montant</th><th>Date</th><th></th>
+        <th>Zone</th>
+        <th>Boutique</th>
+        <th>Statut</th>
+        <th>Montant</th>
+        <th>Date</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -37,15 +42,23 @@
       <tr>
         <td>{{ o.order_number }}</td>
         {% if current_user.role != 'client' %}<td>{{ o.client_name }}</td>{% endif %}
-        {% if current_user.role != 'livreur' %}<td>{{ o.livreur_name or '—' }}</td>{% endif %}
-        <td>{{ o.zone_name or '—' }}</td>
+        {% if current_user.role != 'livreur' %}<td>{{ o.livreur_name or '-' }}</td>{% endif %}
+        <td>{{ o.zone_name or '-' }}</td>
+        <td>
+          {% if o.shop_name or o.shop_order_ref or o.shop_platform %}
+            <strong>{{ o.shop_name or o.shop_platform }}</strong>
+            {% if o.shop_order_ref %}<br><span class="td-muted">{{ o.shop_order_ref }}</span>{% endif %}
+          {% else %}
+            <span class="td-muted">-</span>
+          {% endif %}
+        </td>
         <td><span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[o.status] }}">{{ o.status }}</span></td>
         <td>{{ o.total_amount | money }}</td>
         <td class="td-muted">{{ o.created_at | dt }}</td>
         <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="td-empty">Aucune commande trouvée.</td></tr>
+      <tr><td colspan="9" class="td-empty">Aucune commande trouvee.</td></tr>
     {% endfor %}
     </tbody>
   </table>

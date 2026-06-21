@@ -68,7 +68,35 @@ def deduct_stock_for_items(conn, items):
     return None
 
 
-def create_order_record(conn, client_id, zone_id, address, recipient_name, recipient_phone, items, source="manual"):
+SHOP_PLATFORMS = {
+    "": "",
+    "shopify": "Shopify",
+    "woocommerce": "WooCommerce",
+    "prestashop": "PrestaShop",
+    "facebook": "Facebook / Instagram",
+    "whatsapp": "WhatsApp",
+    "other": "Autre boutique",
+}
+
+
+def clean_optional(value):
+    return (value or "").strip()
+
+
+def create_order_record(
+    conn,
+    client_id,
+    zone_id,
+    address,
+    recipient_name,
+    recipient_phone,
+    items,
+    source="manual",
+    shop_platform="",
+    shop_name="",
+    shop_order_ref="",
+    shop_order_url="",
+):
     total_amount = 0
     order_items_data = []
     for pid, qty in items:
@@ -81,7 +109,8 @@ def create_order_record(conn, client_id, zone_id, address, recipient_name, recip
     order_number = generate_order_number(conn)
     cur = conn.execute(
         "INSERT INTO orders (order_number, client_id, status, zone_id, recipient_name, recipient_phone, "
-        "delivery_address, total_amount, delivery_fee, source) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "delivery_address, total_amount, delivery_fee, source, shop_platform, shop_name, shop_order_ref, shop_order_url) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             order_number,
             client_id,
@@ -93,6 +122,10 @@ def create_order_record(conn, client_id, zone_id, address, recipient_name, recip
             total_amount,
             0,
             source,
+            clean_optional(shop_platform),
+            clean_optional(shop_name),
+            clean_optional(shop_order_ref),
+            clean_optional(shop_order_url),
         ),
     )
     order_id = cur.lastrowid
@@ -155,6 +188,10 @@ def create_order():
         recipient_name = request.form.get("recipient_name", "").strip()
         recipient_phone = request.form.get("recipient_phone", "").strip()
         address = request.form.get("delivery_address", "").strip()
+        shop_platform = request.form.get("shop_platform", "").strip()
+        shop_name = request.form.get("shop_name", "").strip()
+        shop_order_ref = request.form.get("shop_order_ref", "").strip()
+        shop_order_url = request.form.get("shop_order_url", "").strip()
         product_ids = request.form.getlist("product_id")
         quantities = request.form.getlist("quantity")
 
@@ -169,7 +206,17 @@ def create_order():
 
         if error is None:
             order_id, order_number = create_order_record(
-                conn, client_id, zone_id, address, recipient_name, recipient_phone, items
+                conn,
+                client_id,
+                zone_id,
+                address,
+                recipient_name,
+                recipient_phone,
+                items,
+                shop_platform=shop_platform,
+                shop_name=shop_name,
+                shop_order_ref=shop_order_ref,
+                shop_order_url=shop_order_url,
             )
             conn.commit()
             log_action(g.user, "Création commande", f"{order_number}")
@@ -180,7 +227,7 @@ def create_order():
         flash(error, "danger")
 
     conn.close()
-    return render_template("order_form.html", products=products, zones=zones, clients=clients)
+    return render_template("order_form.html", products=products, zones=zones, clients=clients, shop_platforms=SHOP_PLATFORMS)
 
 
 @bp.route("/sheet", methods=["GET", "POST"])
@@ -215,18 +262,31 @@ def import_sheet():
         errors = []
         for line_number, row in enumerate(rows, start=2):
             row = {k.strip().lower(): (v or "").strip() for k, v in row.items() if k}
+            shop_platform = row.get("plateforme", "") or row.get("boutique_type", "") or row.get("source_boutique", "")
+            shop_name = row.get("boutique", "") or row.get("nom_boutique", "") or row.get("shop", "")
+            shop_order_ref = (
+                row.get("reference_boutique", "")
+                or row.get("ref_boutique", "")
+                or row.get("commande_boutique", "")
+                or row.get("shopify_order", "")
+            )
+            shop_order_url = row.get("lien_boutique", "") or row.get("url_boutique", "") or row.get("shopify_url", "")
             key = (
                 row.get("destinataire", ""),
                 row.get("telephone", ""),
                 row.get("adresse", ""),
                 row.get("zone", ""),
+                shop_platform,
+                shop_name,
+                shop_order_ref,
+                shop_order_url,
             )
             sku = row.get("sku", "")
             try:
                 quantity = int(row.get("quantite", "0"))
             except ValueError:
                 quantity = 0
-            if not all(key) or not sku or quantity <= 0:
+            if not all(key[:4]) or not sku or quantity <= 0:
                 errors.append(f"Ligne {line_number}: donnees incompletes.")
                 continue
 
@@ -243,7 +303,16 @@ def import_sheet():
 
         created = []
         if not errors:
-            for (recipient_name, recipient_phone, address, _zone_name), data in grouped.items():
+            for (
+                recipient_name,
+                recipient_phone,
+                address,
+                _zone_name,
+                shop_platform,
+                shop_name,
+                shop_order_ref,
+                shop_order_url,
+            ), data in grouped.items():
                 order_id, order_number = create_order_record(
                     conn,
                     client_id,
@@ -253,6 +322,10 @@ def import_sheet():
                     recipient_phone,
                     data["items"],
                     source="sheet",
+                    shop_platform=shop_platform,
+                    shop_name=shop_name,
+                    shop_order_ref=shop_order_ref,
+                    shop_order_url=shop_order_url,
                 )
                 created.append((order_id, order_number))
             conn.commit()
@@ -273,7 +346,7 @@ def import_sheet():
         return redirect(url_for("orders.list_orders"))
 
     conn.close()
-    return render_template("order_sheet_import.html", clients=clients)
+    return render_template("order_sheet_import.html", clients=clients, shop_platforms=SHOP_PLATFORMS)
 
 
 @bp.route("/<int:order_id>")

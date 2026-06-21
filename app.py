@@ -21,6 +21,14 @@ def create_app():
 
     app.before_request(load_logged_in_user)
 
+    @app.url_defaults
+    def add_tab_id(endpoint, values):
+        if endpoint == "static" or "_tab" in values:
+            return
+        tab_id = g.get("tab_id")
+        if tab_id:
+            values["_tab"] = tab_id
+
     app.register_blueprint(auth_routes.bp)
     app.register_blueprint(dashboard_routes.bp)
     app.register_blueprint(users_routes.bp)

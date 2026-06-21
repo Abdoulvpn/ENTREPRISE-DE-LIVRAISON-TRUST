@@ -16,6 +16,17 @@
         <div class="text-end td-muted" style="font-size:13px;">
           Créée le {{ order.created_at | dt }}
         </div>
+        {% if order.shop_name or order.shop_platform or order.shop_order_ref or order.shop_order_url %}
+        <div class="col-12 mt-3">
+          <p class="td-muted mb-1" style="font-size:12.5px;">BOUTIQUE</p>
+          <p class="mb-0">
+            {{ order.shop_name or 'Boutique' }}
+            {% if order.shop_platform %}<span class="td-muted">({{ order.shop_platform }})</span>{% endif %}
+            {% if order.shop_order_ref %}<br><span class="td-muted">Reference : {{ order.shop_order_ref }}</span>{% endif %}
+            {% if order.shop_order_url %}<br><a href="{{ order.shop_order_url }}" target="_blank" rel="noopener">Ouvrir la commande boutique</a>{% endif %}
+          </p>
+        </div>
+        {% endif %}
       </div>
 
       <div class="row mb-3">

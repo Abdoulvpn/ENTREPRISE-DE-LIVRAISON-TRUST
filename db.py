@@ -146,6 +146,10 @@ def init_db(reset=False):
             recipient_name TEXT,
             recipient_phone TEXT,
             source TEXT NOT NULL DEFAULT 'manual',
+            shop_platform TEXT,
+            shop_name TEXT,
+            shop_order_ref TEXT,
+            shop_order_url TEXT,
             delivery_address TEXT,
             total_amount REAL NOT NULL DEFAULT 0,
             delivery_fee REAL NOT NULL DEFAULT 0,
@@ -195,6 +199,14 @@ def ensure_schema(conn):
         conn.execute("ALTER TABLE orders ADD COLUMN recipient_phone TEXT")
     if "source" not in columns:
         conn.execute("ALTER TABLE orders ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
+    if "shop_platform" not in columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN shop_platform TEXT")
+    if "shop_name" not in columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN shop_name TEXT")
+    if "shop_order_ref" not in columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN shop_order_ref TEXT")
+    if "shop_order_url" not in columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN shop_order_url TEXT")
     conn.commit()
 
 
