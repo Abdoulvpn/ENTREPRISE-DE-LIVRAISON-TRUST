@@ -32,7 +32,7 @@
         <td>{{ i.invoice_number }}</td>
         <td>{{ i.order_number }}</td>
         {% if current_user.role != 'client' %}<td>{{ i.client_name }}</td>{% endif %}
-        <td>{{ i.amount | money }}</td>
+        <td>{{ i.display_amount | money }}</td>
         <td><span class="td-badge" style="background:{{ '#16a34a' if i.status=='payee' else '#dc2626' }}">{{ 'Payée' if i.status=='payee' else 'Impayée' }}</span></td>
         <td class="td-muted">{{ i.created_at | dt }}</td>
         <td><a href="{{ url_for('invoices.invoice_detail', invoice_id=i.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>

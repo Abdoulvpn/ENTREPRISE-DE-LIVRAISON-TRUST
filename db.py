@@ -143,6 +143,9 @@ def init_db(reset=False):
             client_id INTEGER NOT NULL REFERENCES users(id),
             status TEXT NOT NULL DEFAULT 'en_attente',
             zone_id INTEGER REFERENCES zones(id),
+            recipient_name TEXT,
+            recipient_phone TEXT,
+            source TEXT NOT NULL DEFAULT 'manual',
             delivery_address TEXT,
             total_amount REAL NOT NULL DEFAULT 0,
             delivery_fee REAL NOT NULL DEFAULT 0,
@@ -176,11 +179,23 @@ def init_db(reset=False):
         """
     )
     conn.commit()
+    ensure_schema(conn)
 
     if is_new:
         seed(conn)
 
     conn.close()
+
+
+def ensure_schema(conn):
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(orders)").fetchall()}
+    if "recipient_name" not in columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN recipient_name TEXT")
+    if "recipient_phone" not in columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN recipient_phone TEXT")
+    if "source" not in columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
+    conn.commit()
 
 
 def seed(conn):

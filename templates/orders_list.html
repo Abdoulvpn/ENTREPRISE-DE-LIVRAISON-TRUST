@@ -6,7 +6,10 @@
 <div class="td-section-title">
   <span>{{ orders | length }} commande(s)</span>
   {% if current_user.role in ['super_admin','moderateur','agent_confirmation','client'] %}
-  <a href="{{ url_for('orders.create_order') }}" class="btn td-btn-accent btn-sm">+ Nouvelle commande</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('orders.import_sheet') }}" class="btn td-btn-outline btn-sm">Sheet boutique</a>
+    <a href="{{ url_for('orders.create_order') }}" class="btn td-btn-accent btn-sm">+ Nouvelle commande</a>
+  </div>
   {% endif %}
 </div>
 
@@ -37,7 +40,7 @@
         {% if current_user.role != 'livreur' %}<td>{{ o.livreur_name or '—' }}</td>{% endif %}
         <td>{{ o.zone_name or '—' }}</td>
         <td><span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[o.status] }}">{{ o.status }}</span></td>
-        <td>{{ (o.total_amount + o.delivery_fee) | money }}</td>
+        <td>{{ o.total_amount | money }}</td>
         <td class="td-muted">{{ o.created_at | dt }}</td>
         <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>
       </tr>

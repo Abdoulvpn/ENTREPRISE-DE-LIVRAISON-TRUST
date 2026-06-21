@@ -345,6 +345,13 @@ table.td-table tr:hover td { background: #fafbff; }
   margin-bottom: 8px;
 }
 
+.td-import-help {
+  background: #f8f9fc;
+  border: 1px solid var(--td-border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
 @media (max-width: 880px) {
   body.td-menu-open {
     overflow: hidden;

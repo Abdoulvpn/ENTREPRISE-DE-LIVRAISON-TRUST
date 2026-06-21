@@ -23,7 +23,9 @@ def index():
             "SELECT * FROM orders WHERE client_id = ? ORDER BY created_at DESC LIMIT 10", (g.user["id"],)
         ).fetchall()
         invoices = conn.execute(
-            "SELECT * FROM invoices WHERE client_id = ? ORDER BY created_at DESC LIMIT 10", (g.user["id"],)
+            "SELECT i.*, o.total_amount as display_amount FROM invoices i "
+            "JOIN orders o ON o.id=i.order_id WHERE i.client_id = ? ORDER BY i.created_at DESC LIMIT 10",
+            (g.user["id"],),
         ).fetchall()
         stats = {
             "total_orders": conn.execute("SELECT COUNT(*) c FROM orders WHERE client_id=?", (g.user["id"],)).fetchone()["c"],
@@ -75,7 +77,7 @@ def index():
     taux_retour = round((retournees / cloturees) * 100, 1) if cloturees else 0
 
     ca_total = conn.execute(
-        "SELECT COALESCE(SUM(total_amount + delivery_fee),0) ca FROM orders WHERE status='livree'"
+        "SELECT COALESCE(SUM(total_amount),0) ca FROM orders WHERE status='livree'"
     ).fetchone()["ca"]
 
     # CA des 7 derniers jours (pour le graphique)
@@ -84,7 +86,7 @@ def index():
         d = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
         days.append((datetime.now() - timedelta(days=i)).strftime("%d/%m"))
         val = conn.execute(
-            "SELECT COALESCE(SUM(total_amount + delivery_fee),0) ca FROM orders "
+            "SELECT COALESCE(SUM(total_amount),0) ca FROM orders "
             "WHERE status='livree' AND date(delivered_at)=?",
             (d,),
         ).fetchone()["ca"]
@@ -93,7 +95,7 @@ def index():
     # Performance par zone
     perf_zone = conn.execute(
         "SELECT z.name as zone_name, COUNT(o.id) as nb_commandes, "
-        "COALESCE(SUM(CASE WHEN o.status='livree' THEN o.total_amount+o.delivery_fee ELSE 0 END),0) as ca "
+        "COALESCE(SUM(CASE WHEN o.status='livree' THEN o.total_amount ELSE 0 END),0) as ca "
         "FROM orders o LEFT JOIN zones z ON z.id=o.zone_id GROUP BY o.zone_id ORDER BY nb_commandes DESC"
     ).fetchall()
 

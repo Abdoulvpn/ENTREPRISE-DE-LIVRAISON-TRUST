@@ -12,7 +12,7 @@ bp = Blueprint("invoices", __name__, url_prefix="/factures")
 def list_invoices():
     conn = get_db()
     query = (
-        "SELECT i.*, u.full_name as client_name, o.order_number FROM invoices i "
+        "SELECT i.*, o.total_amount as display_amount, u.full_name as client_name, o.order_number FROM invoices i "
         "JOIN users u ON u.id=i.client_id JOIN orders o ON o.id=i.order_id "
     )
     params = []
@@ -22,11 +22,15 @@ def list_invoices():
     query += "ORDER BY i.created_at DESC"
     invoices = conn.execute(query, params).fetchall()
 
-    total_impaye = conn.execute(
-        "SELECT COALESCE(SUM(amount),0) s FROM invoices WHERE status='impayee'"
-        + (" AND client_id=?" if g.user["role"] == "client" else ""),
-        ([g.user["id"]] if g.user["role"] == "client" else []),
-    ).fetchone()["s"]
+    total_query = (
+        "SELECT COALESCE(SUM(o.total_amount),0) s FROM invoices i "
+        "JOIN orders o ON o.id=i.order_id WHERE i.status='impayee'"
+    )
+    total_params = []
+    if g.user["role"] == "client":
+        total_query += " AND i.client_id=?"
+        total_params.append(g.user["id"])
+    total_impaye = conn.execute(total_query, total_params).fetchone()["s"]
     conn.close()
     return render_template("invoices_list.html", invoices=invoices, total_impaye=total_impaye)
 
@@ -37,7 +41,7 @@ def invoice_detail(invoice_id):
     conn = get_db()
     invoice = conn.execute(
         "SELECT i.*, u.full_name as client_name, u.email as client_email, o.order_number, o.delivery_address, "
-        "o.total_amount as order_total, o.delivery_fee FROM invoices i "
+        "o.recipient_name, o.recipient_phone, o.total_amount as order_total FROM invoices i "
         "JOIN users u ON u.id=i.client_id JOIN orders o ON o.id=i.order_id WHERE i.id=?",
         (invoice_id,),
     ).fetchone()
@@ -74,7 +78,7 @@ def mark_paid(invoice_id):
 def export_invoices():
     conn = get_db()
     invoices = conn.execute(
-        "SELECT i.invoice_number, o.order_number, u.full_name as client_name, i.amount, i.status, i.created_at, i.paid_at "
+        "SELECT i.invoice_number, o.order_number, u.full_name as client_name, o.total_amount, i.status, i.created_at, i.paid_at "
         "FROM invoices i JOIN users u ON u.id=i.client_id JOIN orders o ON o.id=i.order_id ORDER BY i.created_at DESC"
     ).fetchall()
     conn.close()
@@ -84,7 +88,7 @@ def export_invoices():
     writer.writerow(["N° Facture", "N° Commande", "Client", "Montant (GNF)", "Statut", "Date création", "Date paiement"])
     for inv in invoices:
         writer.writerow(
-            [inv["invoice_number"], inv["order_number"], inv["client_name"], inv["amount"], inv["status"], inv["created_at"], inv["paid_at"] or ""]
+            [inv["invoice_number"], inv["order_number"], inv["client_name"], inv["total_amount"], inv["status"], inv["created_at"], inv["paid_at"] or ""]
         )
 
     return Response(

@@ -1,3 +1,5 @@
+import csv
+import io
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from datetime import datetime
 from db import get_db, log_action
@@ -66,6 +68,42 @@ def deduct_stock_for_items(conn, items):
     return None
 
 
+def create_order_record(conn, client_id, zone_id, address, recipient_name, recipient_phone, items, source="manual"):
+    total_amount = 0
+    order_items_data = []
+    for pid, qty in items:
+        product = conn.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+        if not product:
+            raise ValueError(f"Produit introuvable: {pid}")
+        total_amount += product["price"] * qty
+        order_items_data.append((pid, qty, product["price"]))
+
+    order_number = generate_order_number(conn)
+    cur = conn.execute(
+        "INSERT INTO orders (order_number, client_id, status, zone_id, recipient_name, recipient_phone, "
+        "delivery_address, total_amount, delivery_fee, source) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (
+            order_number,
+            client_id,
+            "en_attente",
+            zone_id,
+            recipient_name,
+            recipient_phone,
+            address,
+            total_amount,
+            0,
+            source,
+        ),
+    )
+    order_id = cur.lastrowid
+    for pid, qty, price in order_items_data:
+        conn.execute(
+            "INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (?,?,?,?)",
+            (order_id, pid, qty, price),
+        )
+    return order_id, order_number
+
+
 @bp.route("/")
 @login_required
 def list_orders():
@@ -114,6 +152,8 @@ def create_order():
     if request.method == "POST":
         client_id = g.user["id"] if g.user["role"] == "client" else request.form.get("client_id")
         zone_id = request.form.get("zone_id")
+        recipient_name = request.form.get("recipient_name", "").strip()
+        recipient_phone = request.form.get("recipient_phone", "").strip()
         address = request.form.get("delivery_address", "").strip()
         product_ids = request.form.getlist("product_id")
         quantities = request.form.getlist("quantity")
@@ -124,30 +164,13 @@ def create_order():
                 items.append((int(pid), int(qty)))
 
         error = None
-        if not client_id or not zone_id or not address or not items:
-            error = "Veuillez renseigner le client, la zone, l'adresse et au moins un article."
+        if not client_id or not zone_id or not recipient_name or not recipient_phone or not address or not items:
+            error = "Veuillez renseigner le client, le destinataire, son telephone, la zone, l'adresse et au moins un article."
 
         if error is None:
-            zone = conn.execute("SELECT * FROM zones WHERE id=?", (zone_id,)).fetchone()
-            total_amount = 0
-            order_items_data = []
-            for pid, qty in items:
-                product = conn.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
-                total_amount += product["price"] * qty
-                order_items_data.append((pid, qty, product["price"]))
-
-            order_number = generate_order_number(conn)
-            cur = conn.execute(
-                "INSERT INTO orders (order_number, client_id, status, zone_id, delivery_address, total_amount, delivery_fee) "
-                "VALUES (?,?,?,?,?,?,?)",
-                (order_number, client_id, "en_attente", zone_id, address, total_amount, zone["delivery_fee"]),
+            order_id, order_number = create_order_record(
+                conn, client_id, zone_id, address, recipient_name, recipient_phone, items
             )
-            order_id = cur.lastrowid
-            for pid, qty, price in order_items_data:
-                conn.execute(
-                    "INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (?,?,?,?)",
-                    (order_id, pid, qty, price),
-                )
             conn.commit()
             log_action(g.user, "Création commande", f"{order_number}")
             conn.close()
@@ -158,6 +181,99 @@ def create_order():
 
     conn.close()
     return render_template("order_form.html", products=products, zones=zones, clients=clients)
+
+
+@bp.route("/sheet", methods=["GET", "POST"])
+@roles_required("super_admin", "moderateur", "agent_confirmation", "client")
+def import_sheet():
+    conn = get_db()
+    clients = []
+    if g.user["role"] in ("super_admin", "moderateur", "agent_confirmation"):
+        clients = conn.execute("SELECT * FROM users WHERE role='client' AND is_active=1 ORDER BY full_name").fetchall()
+
+    if request.method == "POST":
+        client_id = g.user["id"] if g.user["role"] == "client" else request.form.get("client_id")
+        csv_text = request.form.get("csv_data", "").strip()
+        file = request.files.get("csv_file")
+        if file and file.filename:
+            csv_text = file.read().decode("utf-8-sig")
+
+        if not client_id or not csv_text:
+            conn.close()
+            flash("Veuillez choisir un client et fournir un fichier CSV ou des lignes collees depuis le sheet.", "danger")
+            return redirect(url_for("orders.import_sheet"))
+
+        rows = csv.DictReader(io.StringIO(csv_text))
+        required = {"destinataire", "telephone", "adresse", "zone", "sku", "quantite"}
+        headers = {h.strip().lower() for h in (rows.fieldnames or [])}
+        if not required.issubset(headers):
+            conn.close()
+            flash("Colonnes requises: destinataire, telephone, adresse, zone, sku, quantite.", "danger")
+            return redirect(url_for("orders.import_sheet"))
+
+        grouped = {}
+        errors = []
+        for line_number, row in enumerate(rows, start=2):
+            row = {k.strip().lower(): (v or "").strip() for k, v in row.items() if k}
+            key = (
+                row.get("destinataire", ""),
+                row.get("telephone", ""),
+                row.get("adresse", ""),
+                row.get("zone", ""),
+            )
+            sku = row.get("sku", "")
+            try:
+                quantity = int(row.get("quantite", "0"))
+            except ValueError:
+                quantity = 0
+            if not all(key) or not sku or quantity <= 0:
+                errors.append(f"Ligne {line_number}: donnees incompletes.")
+                continue
+
+            zone = conn.execute("SELECT id FROM zones WHERE lower(name)=lower(?)", (key[3],)).fetchone()
+            product = conn.execute("SELECT id FROM products WHERE lower(sku)=lower(?) AND is_validated=1", (sku,)).fetchone()
+            if not zone:
+                errors.append(f"Ligne {line_number}: zone inconnue ({key[3]}).")
+                continue
+            if not product:
+                errors.append(f"Ligne {line_number}: produit SKU inconnu ({sku}).")
+                continue
+
+            grouped.setdefault(key, {"zone_id": zone["id"], "items": []})["items"].append((product["id"], quantity))
+
+        created = []
+        if not errors:
+            for (recipient_name, recipient_phone, address, _zone_name), data in grouped.items():
+                order_id, order_number = create_order_record(
+                    conn,
+                    client_id,
+                    data["zone_id"],
+                    address,
+                    recipient_name,
+                    recipient_phone,
+                    data["items"],
+                    source="sheet",
+                )
+                created.append((order_id, order_number))
+            conn.commit()
+
+        if errors:
+            conn.rollback()
+            conn.close()
+            flash("Import annule: " + " ".join(errors[:4]), "danger")
+            return redirect(url_for("orders.import_sheet"))
+
+        for _order_id, order_number in created:
+            log_action(g.user, "Creation commande sheet", order_number)
+
+        conn.close()
+        flash(f"{len(created)} commande(s) creee(s) depuis le sheet boutique.", "success")
+        if len(created) == 1:
+            return redirect(url_for("orders.order_detail", order_id=created[0][0]))
+        return redirect(url_for("orders.list_orders"))
+
+    conn.close()
+    return render_template("order_sheet_import.html", clients=clients)
 
 
 @bp.route("/<int:order_id>")
@@ -280,7 +396,7 @@ def update_delivery_status(order_id):
     if new_status == "livree":
         conn.execute("UPDATE orders SET status='livree', delivered_at=datetime('now') WHERE id=?", (order_id,))
         invoice_number = generate_invoice_number(conn)
-        amount = order["total_amount"] + order["delivery_fee"]
+        amount = order["total_amount"]
         conn.execute(
             "INSERT INTO invoices (invoice_number, order_id, client_id, amount, status) VALUES (?,?,?,?,'impayee')",
             (invoice_number, order_id, order["client_id"], amount),

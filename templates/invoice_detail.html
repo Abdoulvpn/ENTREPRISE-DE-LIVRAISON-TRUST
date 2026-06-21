@@ -27,14 +27,20 @@
     </div>
   </div>
 
+  <div class="row mb-4">
+    <div class="col-12">
+      <p class="td-muted mb-1" style="font-size:12.5px;">DESTINATAIRE</p>
+      <p class="mb-0">{{ invoice.recipient_name or invoice.client_name }}{% if invoice.recipient_phone %}<br><span class="td-muted">{{ invoice.recipient_phone }}</span>{% endif %}</p>
+    </div>
+  </div>
+
   <table class="td-table mb-3">
     <thead><tr><th>Produit</th><th>Qté</th><th>Total</th></tr></thead>
     <tbody>
     {% for it in items %}
       <tr><td>{{ it.product_name }}</td><td>{{ it.quantity }}</td><td>{{ (it.unit_price*it.quantity) | money }}</td></tr>
     {% endfor %}
-      <tr><td colspan="2" class="text-end">Frais de livraison</td><td>{{ invoice.delivery_fee | money }}</td></tr>
-      <tr><td colspan="2" class="text-end"><strong>Total</strong></td><td><strong>{{ invoice.amount | money }}</strong></td></tr>
+      <tr><td colspan="2" class="text-end"><strong>Total</strong></td><td><strong>{{ invoice.order_total | money }}</strong></td></tr>
     </tbody>
   </table>
 

@@ -24,6 +24,10 @@
           <p class="mb-0">{{ order.client_name }}<br><span class="td-muted">{{ order.client_email }}</span></p>
         </div>
         <div class="col-6">
+          <p class="td-muted mb-1" style="font-size:12.5px;">DESTINATAIRE</p>
+          <p class="mb-0">{{ order.recipient_name or order.client_name }}<br><span class="td-muted">{{ order.recipient_phone or order.client_phone or '' }}</span></p>
+        </div>
+        <div class="col-6">
           <p class="td-muted mb-1" style="font-size:12.5px;">LIVRAISON</p>
           <p class="mb-0">{{ order.zone_name or '—' }}<br><span class="td-muted">{{ order.delivery_address }}</span></p>
         </div>
@@ -40,9 +44,7 @@
             <td>{{ (it.unit_price * it.quantity) | money }}</td>
           </tr>
         {% endfor %}
-          <tr><td colspan="3" class="text-end"><strong>Sous-total</strong></td><td><strong>{{ order.total_amount | money }}</strong></td></tr>
-          <tr><td colspan="3" class="text-end">Frais de livraison</td><td>{{ order.delivery_fee | money }}</td></tr>
-          <tr><td colspan="3" class="text-end"><strong>Total</strong></td><td><strong>{{ (order.total_amount + order.delivery_fee) | money }}</strong></td></tr>
+          <tr><td colspan="3" class="text-end"><strong>Total</strong></td><td><strong>{{ order.total_amount | money }}</strong></td></tr>
         </tbody>
       </table>
     </div>

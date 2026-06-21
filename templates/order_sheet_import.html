@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Sheet boutique - TrustDelivery{% endblock %}
+{% block page_title %}Sheet boutique{% endblock %}
+{% block content %}
+
+<div class="td-card" style="max-width:860px;">
+  <form method="post" enctype="multipart/form-data">
+    {% if clients %}
+    <div class="mb-3">
+      <label class="form-label">Client</label>
+      <select name="client_id" class="form-select" required>
+        <option value="">Selectionner un client</option>
+        {% for c in clients %}<option value="{{ c.id }}">{{ c.full_name }} ({{ c.email }})</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="mb-3">
+      <label class="form-label">Fichier CSV du sheet</label>
+      <input type="file" name="csv_file" class="form-control" accept=".csv,text/csv">
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Ou coller les lignes CSV</label>
+      <textarea name="csv_data" class="form-control" rows="9" placeholder="destinataire,telephone,adresse,zone,sku,quantite&#10;Mamadou Bah,+224620000001,Kaloum centre,Conakry,PRD-001,2"></textarea>
+    </div>
+
+    <div class="td-import-help mb-3">
+      <strong>Colonnes requises</strong>
+      <p class="td-muted mb-0" style="font-size:13px;">
+        destinataire, telephone, adresse, zone, sku, quantite. Les lignes avec le meme destinataire, telephone,
+        adresse et zone sont regroupees dans une seule commande.
+      </p>
+    </div>
+
+    <button type="submit" class="btn td-btn-primary">Creer les commandes</button>
+    <a href="{{ url_for('orders.list_orders') }}" class="btn td-btn-outline ms-2">Annuler</a>
+  </form>
+</div>
+
+{% endblock %}
