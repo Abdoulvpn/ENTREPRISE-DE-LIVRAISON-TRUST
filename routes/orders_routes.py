@@ -100,9 +100,12 @@ def create_order_record(
     total_amount = 0
     order_items_data = []
     for pid, qty in items:
-        product = conn.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+        product = conn.execute(
+            "SELECT * FROM products WHERE id=? AND supplier_client_id=? AND is_validated=1",
+            (pid, client_id),
+        ).fetchone()
         if not product:
-            raise ValueError(f"Produit introuvable: {pid}")
+            raise ValueError("Un article sélectionné n'appartient pas au stock de ce client.")
         total_amount += product["price"] * qty
         order_items_data.append((pid, qty, product["price"]))
 
@@ -176,7 +179,13 @@ def list_orders():
 @roles_required("super_admin", "moderateur", "agent_confirmation", "client")
 def create_order():
     conn = get_db()
-    products = conn.execute("SELECT * FROM products WHERE is_validated=1 ORDER BY name").fetchall()
+    if g.user["role"] == "client":
+        products = conn.execute(
+            "SELECT * FROM products WHERE is_validated=1 AND supplier_client_id=? ORDER BY name",
+            (g.user["id"],),
+        ).fetchall()
+    else:
+        products = conn.execute("SELECT * FROM products WHERE is_validated=1 ORDER BY name").fetchall()
     zones = conn.execute("SELECT * FROM zones ORDER BY name").fetchall()
     clients = []
     if g.user["role"] in ("super_admin", "moderateur", "agent_confirmation"):
@@ -203,6 +212,20 @@ def create_order():
         error = None
         if not client_id or not zone_id or not recipient_name or not recipient_phone or not address or not items:
             error = "Veuillez renseigner le client, le destinataire, son telephone, la zone, l'adresse et au moins un article."
+
+        client = conn.execute(
+            "SELECT id FROM users WHERE id=? AND role='client' AND is_active=1", (client_id,)
+        ).fetchone() if client_id else None
+        if error is None and not client:
+            error = "Le client sélectionné est invalide ou inactif."
+        if error is None:
+            owned_count = conn.execute(
+                f"SELECT COUNT(*) c FROM products WHERE is_validated=1 AND supplier_client_id=? "
+                f"AND id IN ({','.join('?' for _ in items)})",
+                [client_id, *[pid for pid, _qty in items]],
+            ).fetchone()["c"]
+            if owned_count != len({pid for pid, _qty in items}):
+                error = "Tous les articles doivent appartenir au stock du client sélectionné."
 
         if error is None:
             order_id, order_number = create_order_record(
@@ -250,6 +273,14 @@ def import_sheet():
             flash("Veuillez choisir un client et fournir un fichier CSV ou des lignes collees depuis le sheet.", "danger")
             return redirect(url_for("orders.import_sheet"))
 
+        client = conn.execute(
+            "SELECT id FROM users WHERE id=? AND role='client' AND is_active=1", (client_id,)
+        ).fetchone()
+        if not client:
+            conn.close()
+            flash("Le client sélectionné est invalide ou inactif.", "danger")
+            return redirect(url_for("orders.import_sheet"))
+
         rows = csv.DictReader(io.StringIO(csv_text))
         required = {"destinataire", "telephone", "adresse", "zone", "sku", "quantite"}
         headers = {h.strip().lower() for h in (rows.fieldnames or [])}
@@ -291,12 +322,15 @@ def import_sheet():
                 continue
 
             zone = conn.execute("SELECT id FROM zones WHERE lower(name)=lower(?)", (key[3],)).fetchone()
-            product = conn.execute("SELECT id FROM products WHERE lower(sku)=lower(?) AND is_validated=1", (sku,)).fetchone()
+            product = conn.execute(
+                "SELECT id FROM products WHERE lower(sku)=lower(?) AND is_validated=1 AND supplier_client_id=?",
+                (sku, client_id),
+            ).fetchone()
             if not zone:
                 errors.append(f"Ligne {line_number}: zone inconnue ({key[3]}).")
                 continue
             if not product:
-                errors.append(f"Ligne {line_number}: produit SKU inconnu ({sku}).")
+                errors.append(f"Ligne {line_number}: produit SKU absent du stock de ce client ({sku}).")
                 continue
 
             grouped.setdefault(key, {"zone_id": zone["id"], "items": []})["items"].append((product["id"], quantity))

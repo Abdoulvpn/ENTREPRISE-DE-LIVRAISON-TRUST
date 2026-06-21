@@ -10,18 +10,39 @@ bp = Blueprint("products", __name__, url_prefix="/produits")
 def list_products():
     conn = get_db()
     search = request.args.get("q", "").strip()
+    client_filter = request.args.get("client_id", "").strip()
     query = (
-        "SELECT p.*, COALESCE(SUM(s.quantity),0) as total_stock, MIN(s.alert_threshold) as alert_threshold "
+        "SELECT p.*, u.full_name as supplier_client_name, "
+        "COALESCE(SUM(s.quantity),0) as total_stock, MIN(s.alert_threshold) as alert_threshold "
         "FROM products p LEFT JOIN stock s ON s.product_id = p.id "
+        "LEFT JOIN users u ON u.id=p.supplier_client_id "
     )
-    params = []
+    conditions, params = [], []
+
+    if g.user["role"] == "client":
+        conditions.append("p.supplier_client_id = ?")
+        params.append(g.user["id"])
+        client_filter = str(g.user["id"])
+    elif client_filter:
+        conditions.append("p.supplier_client_id = ?")
+        params.append(client_filter)
+
     if search:
-        query += "WHERE p.name LIKE ? OR p.sku LIKE ? "
-        params = [f"%{search}%", f"%{search}%"]
+        conditions.append("(p.name LIKE ? OR p.sku LIKE ?)")
+        params.extend([f"%{search}%", f"%{search}%"])
+    if conditions:
+        query += "WHERE " + " AND ".join(conditions) + " "
     query += "GROUP BY p.id ORDER BY p.created_at DESC"
     products = conn.execute(query, params).fetchall()
+    clients = []
+    if g.user["role"] != "client":
+        clients = conn.execute(
+            "SELECT id, full_name, email FROM users WHERE role='client' AND is_active=1 ORDER BY full_name"
+        ).fetchall()
     conn.close()
-    return render_template("products_list.html", products=products, search=search)
+    return render_template(
+        "products_list.html", products=products, search=search, clients=clients, client_filter=client_filter
+    )
 
 
 @bp.route("/nouveau", methods=["GET", "POST"])
@@ -29,28 +50,36 @@ def list_products():
 def create_product():
     conn = get_db()
     warehouses = conn.execute("SELECT * FROM warehouses").fetchall()
+    clients = conn.execute(
+        "SELECT id, full_name, email FROM users WHERE role='client' AND is_active=1 ORDER BY full_name"
+    ).fetchall()
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         sku = request.form.get("sku", "").strip()
         description = request.form.get("description", "").strip()
         category = request.form.get("category", "").strip()
-        supplier = request.form.get("supplier", "").strip()
+        supplier_client_id = request.form.get("supplier_client_id", "").strip()
         price = request.form.get("price", "0")
         warehouse_id = request.form.get("warehouse_id")
         initial_qty = request.form.get("initial_qty", "0")
         alert_threshold = request.form.get("alert_threshold", "5")
 
         error = None
-        if not name or not sku or not price or not warehouse_id:
-            error = "Veuillez renseigner les champs obligatoires (nom, référence, prix, entrepôt)."
+        supplier_client = conn.execute(
+            "SELECT id, full_name FROM users WHERE id=? AND role='client' AND is_active=1",
+            (supplier_client_id,),
+        ).fetchone() if supplier_client_id else None
+        if not name or not sku or not price or not warehouse_id or not supplier_client:
+            error = "Veuillez renseigner les champs obligatoires, notamment le client fournisseur."
         elif conn.execute("SELECT id FROM products WHERE sku=?", (sku,)).fetchone():
             error = "Cette référence (SKU) existe déjà."
 
         if error is None:
             cur = conn.execute(
-                "INSERT INTO products (name, sku, description, category, supplier, price, is_validated) VALUES (?,?,?,?,?,?,1)",
-                (name, sku, description, category, supplier, float(price)),
+                "INSERT INTO products (name, sku, description, category, supplier, supplier_client_id, price, is_validated) "
+                "VALUES (?,?,?,?,?,?,?,1)",
+                (name, sku, description, category, supplier_client["full_name"], supplier_client_id, float(price)),
             )
             product_id = cur.lastrowid
             conn.execute(
@@ -71,7 +100,7 @@ def create_product():
         flash(error, "danger")
 
     conn.close()
-    return render_template("product_form.html", warehouses=warehouses, product=None)
+    return render_template("product_form.html", warehouses=warehouses, clients=clients, product=None)
 
 
 @bp.route("/<int:product_id>/modifier", methods=["GET", "POST"])
@@ -80,19 +109,32 @@ def edit_product(product_id):
     conn = get_db()
     product = conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone()
     warehouses = conn.execute("SELECT * FROM warehouses").fetchall()
+    clients = conn.execute(
+        "SELECT id, full_name, email FROM users WHERE role='client' AND is_active=1 ORDER BY full_name"
+    ).fetchall()
     if not product:
         conn.close()
         flash("Produit introuvable.", "danger")
         return redirect(url_for("products.list_products"))
 
     if request.method == "POST":
+        supplier_client_id = request.form.get("supplier_client_id", "").strip()
+        supplier_client = conn.execute(
+            "SELECT id, full_name FROM users WHERE id=? AND role='client' AND is_active=1",
+            (supplier_client_id,),
+        ).fetchone() if supplier_client_id else None
+        if not supplier_client:
+            conn.close()
+            flash("Veuillez sélectionner un client fournisseur actif.", "danger")
+            return redirect(url_for("products.edit_product", product_id=product_id))
         conn.execute(
-            "UPDATE products SET name=?, description=?, category=?, supplier=?, price=? WHERE id=?",
+            "UPDATE products SET name=?, description=?, category=?, supplier=?, supplier_client_id=?, price=? WHERE id=?",
             (
                 request.form.get("name", "").strip(),
                 request.form.get("description", "").strip(),
                 request.form.get("category", "").strip(),
-                request.form.get("supplier", "").strip(),
+                supplier_client["full_name"],
+                supplier_client_id,
                 float(request.form.get("price", "0")),
                 product_id,
             ),
@@ -104,7 +146,7 @@ def edit_product(product_id):
         return redirect(url_for("products.list_products"))
 
     conn.close()
-    return render_template("product_form.html", warehouses=warehouses, product=product)
+    return render_template("product_form.html", warehouses=warehouses, clients=clients, product=product)
 
 
 @bp.route("/<int:product_id>/mouvements", methods=["GET", "POST"])

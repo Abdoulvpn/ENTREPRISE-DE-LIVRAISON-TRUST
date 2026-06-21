@@ -8,7 +8,7 @@
     {% if clients %}
     <div class="mb-3">
       <label class="form-label">Client</label>
-      <select name="client_id" class="form-select" required>
+      <select name="client_id" id="client-id" class="form-select" required>
         <option value="">Selectionner un client</option>
         {% for c in clients %}<option value="{{ c.id }}">{{ c.full_name }} ({{ c.email }})</option>{% endfor %}
       </select>
@@ -87,7 +87,7 @@
   <div class="td-product-row-grid item-row">
     <select name="product_id" class="form-select" required>
       <option value="">Produit</option>
-      {% for p in products %}<option value="{{ p.id }}">{{ p.name }} - {{ p.price | int }} GNF</option>{% endfor %}
+      {% for p in products %}<option value="{{ p.id }}" data-client-id="{{ p.supplier_client_id or '' }}">{{ p.name }} - {{ p.price | int }} GNF</option>{% endfor %}
     </select>
     <input type="number" name="quantity" min="1" value="1" class="form-control" placeholder="Qte" required>
     <button type="button" class="btn btn-sm btn-outline-danger remove-item">x</button>
@@ -100,6 +100,17 @@
 <script>
   const container = document.getElementById('items-container');
   const template = document.getElementById('item-row-template');
+  const clientSelect = document.getElementById('client-id');
+
+  function filterProducts() {
+    if (!clientSelect) return;
+    const clientId = clientSelect.value;
+    document.querySelectorAll('select[name="product_id"] option[data-client-id]').forEach((option) => {
+      option.hidden = !clientId || option.dataset.clientId !== clientId;
+      option.disabled = option.hidden;
+      if (option.hidden && option.selected) option.parentElement.value = '';
+    });
+  }
 
   function addRow() {
     const clone = template.content.cloneNode(true);
@@ -107,9 +118,11 @@
       e.target.closest('.item-row').remove();
     });
     container.appendChild(clone);
+    filterProducts();
   }
 
   document.getElementById('add-item').addEventListener('click', addRow);
+  if (clientSelect) clientSelect.addEventListener('change', filterProducts);
   addRow();
 </script>
 {% endblock %}

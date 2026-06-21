@@ -10,18 +10,30 @@
   {% endif %}
 </div>
 
-<form method="get" class="mb-3" style="max-width:320px;">
-  <input type="text" name="q" class="form-control" placeholder="Rechercher par nom ou référence..." value="{{ search }}">
+<form method="get" class="row g-2 mb-3" style="max-width:680px;">
+  <div class="col-sm-6">
+    <input type="text" name="q" class="form-control" placeholder="Rechercher par nom ou référence..." value="{{ search }}">
+  </div>
+  {% if current_user.role != 'client' %}
+  <div class="col-sm-5">
+    <select name="client_id" class="form-select" onchange="this.form.submit()">
+      <option value="">Tous les clients</option>
+      {% for c in clients %}<option value="{{ c.id }}" {{ 'selected' if client_filter == c.id|string }}>{{ c.full_name }}</option>{% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="col-sm-1"><button class="btn td-btn-outline" type="submit">OK</button></div>
 </form>
 
 <div class="td-table-wrap">
   <table class="td-table">
-    <thead><tr><th>Produit</th><th>Référence</th><th>Catégorie</th><th>Prix</th><th>Stock total</th><th></th></tr></thead>
+    <thead><tr><th>Produit</th><th>Référence</th>{% if current_user.role != 'client' %}<th>Client</th>{% endif %}<th>Catégorie</th><th>Prix</th><th>Stock total</th><th></th></tr></thead>
     <tbody>
     {% for p in products %}
       <tr>
         <td>{{ p.name }}</td>
         <td>{{ p.sku }}</td>
+        {% if current_user.role != 'client' %}<td>{{ p.supplier_client_name or 'Non attribué' }}</td>{% endif %}
         <td>{{ p.category or '—' }}</td>
         <td>{{ p.price | money }}</td>
         <td>
@@ -41,7 +53,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="td-empty">Aucun produit trouvé.</td></tr>
+      <tr><td colspan="{{ 6 if current_user.role == 'client' else 7 }}" class="td-empty">Aucun produit trouvé.</td></tr>
     {% endfor %}
     </tbody>
   </table>

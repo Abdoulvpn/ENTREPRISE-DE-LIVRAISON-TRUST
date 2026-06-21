@@ -105,6 +105,7 @@ def init_db(reset=False):
             description TEXT,
             category TEXT,
             supplier TEXT,
+            supplier_client_id INTEGER REFERENCES users(id),
             price REAL NOT NULL DEFAULT 0,
             is_validated INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -207,6 +208,9 @@ def ensure_schema(conn):
         conn.execute("ALTER TABLE orders ADD COLUMN shop_order_ref TEXT")
     if "shop_order_url" not in columns:
         conn.execute("ALTER TABLE orders ADD COLUMN shop_order_url TEXT")
+    product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
+    if "supplier_client_id" not in product_columns:
+        conn.execute("ALTER TABLE products ADD COLUMN supplier_client_id INTEGER REFERENCES users(id)")
     conn.commit()
 
 
@@ -268,9 +272,9 @@ def seed(conn):
     product_ids = []
     for name, sku, desc, cat, supplier, price in products:
         cur.execute(
-            """INSERT INTO products (name, sku, description, category, supplier, price, is_validated)
-               VALUES (?,?,?,?,?,?,1)""",
-            (name, sku, desc, cat, supplier, price),
+            """INSERT INTO products (name, sku, description, category, supplier, supplier_client_id, price, is_validated)
+               VALUES (?,?,?,?,?,?,?,1)""",
+            (name, sku, desc, cat, supplier, 5, price),
         )
         product_ids.append(cur.lastrowid)
 

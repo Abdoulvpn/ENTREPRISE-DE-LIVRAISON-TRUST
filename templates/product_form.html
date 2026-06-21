@@ -25,8 +25,13 @@
         <input type="text" name="category" class="form-control" value="{{ product.category if product else '' }}">
       </div>
       <div class="col-4 mb-3">
-        <label class="form-label">Fournisseur</label>
-        <input type="text" name="supplier" class="form-control" value="{{ product.supplier if product else '' }}">
+        <label class="form-label">Client fournisseur</label>
+        <select name="supplier_client_id" class="form-select" required>
+          <option value="">Sélectionner un client</option>
+          {% for c in clients %}
+          <option value="{{ c.id }}" {{ 'selected' if product and product.supplier_client_id == c.id }}>{{ c.full_name }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="col-4 mb-3">
         <label class="form-label">Prix unitaire (GNF)</label>
