@@ -10,7 +10,7 @@ import db as db_module
 from auth import load_logged_in_user, role_label
 from db import ROLES
 
-from routes import auth_routes, dashboard_routes, users_routes, products_routes, orders_routes, invoices_routes, settings_routes, shop_routes
+from routes import auth_routes, dashboard_routes, users_routes, products_routes, orders_routes, invoices_routes, settings_routes, shop_routes, help_routes
 
 
 def create_app():
@@ -39,6 +39,7 @@ def create_app():
     app.register_blueprint(settings_routes.bp)
     app.register_blueprint(shop_routes.bp)
     app.register_blueprint(shop_routes.api_bp)
+    app.register_blueprint(help_routes.bp)
 
     @app.context_processor
     def inject_globals():

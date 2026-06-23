@@ -1,12 +1,21 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
 <title>{% block title %}TrustDelivery{% endblock %}</title>
+<script>
+  (() => {
+    const saved = localStorage.getItem('trustdelivery_theme');
+    const theme = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -15,102 +24,82 @@
 <div class="td-shell">
   <div class="td-sidebar-overlay" data-sidebar-close></div>
   <aside class="td-sidebar" id="tdSidebar">
+    <div class="td-sidebar-glow"></div>
     <div class="td-brand">
-      <img src="{{ url_for('static', filename='img/logo-3d-small.png') }}" alt="TrustDelivery" class="td-logo-3d">
+      <a href="{{ url_for('dashboard.index') }}" aria-label="Accueil TrustDelivery">
+        <img src="{{ url_for('static', filename='img/logo-3d-small.png') }}" alt="TrustDelivery" class="td-logo-3d">
+      </a>
+      <div class="td-brand-status"><span></span> Espace sécurisé</div>
     </div>
-    <nav class="td-nav">
-      <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if request.endpoint=='dashboard.index' }}">
-        <i class="bi">▣</i> Tableau de bord
-      </a>
+
+    <nav class="td-nav" aria-label="Navigation principale">
+      <div class="td-nav-label">Espace de travail</div>
+      <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if request.endpoint=='dashboard.index' }}"><i class="bi bi-grid-1x2-fill"></i><span>Tableau de bord</span></a>
+
       {% if current_user.role in ['super_admin','moderateur','agent_confirmation'] %}
-      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}">
-        <i class="bi">▤</i> Commandes
-      </a>
+      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}"><i class="bi bi-bag-check-fill"></i><span>Commandes</span></a>
+      {% elif current_user.role == 'client' %}
+      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}"><i class="bi bi-bag-check-fill"></i><span>Mes commandes</span></a>
+      {% elif current_user.role == 'livreur' %}
+      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}"><i class="bi bi-truck"></i><span>Mes livraisons</span></a>
       {% endif %}
-      {% if current_user.role == 'client' %}
-      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}">
-        <i class="bi">▤</i> Mes commandes
-      </a>
-      {% endif %}
+
       {% if current_user.role in ['super_admin','moderateur','client'] %}
-      <a href="{{ url_for('products.list_shipments') }}" class="{{ 'active' if request.endpoint and 'shipment' in request.endpoint }}">
-        <i class="bi">↗</i> Envois produits
-      </a>
+      <a href="{{ url_for('products.list_shipments') }}" class="{{ 'active' if request.endpoint and 'shipment' in request.endpoint }}"><i class="bi bi-send-fill"></i><span>Envois produits</span></a>
       {% endif %}
       {% if current_user.role in ['super_admin','moderateur','agent_confirmation'] %}
-      <a href="{{ url_for('products.courier_stock') }}" class="{{ 'active' if request.endpoint=='products.courier_stock' }}">
-        <i class="bi">▤</i> Stock livreurs
-      </a>
-      {% endif %}
-      {% if current_user.role == 'livreur' %}
-      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}">
-        <i class="bi">▤</i> Mes livraisons
-      </a>
+      <a href="{{ url_for('products.courier_stock') }}" class="{{ 'active' if request.endpoint=='products.courier_stock' }}"><i class="bi bi-boxes"></i><span>Stock livreurs</span></a>
       {% endif %}
       {% if current_user.role in ['super_admin','moderateur'] %}
-      <a href="{{ url_for('products.list_products') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('products.') }}">
-        <i class="bi">▥</i> Produits &amp; Stock
-      </a>
-      {% endif %}
-      {% if current_user.role == 'agent_confirmation' %}
-      <a href="{{ url_for('products.list_products') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('products.') }}">
-        <i class="bi">▥</i> Catalogue &amp; Stock
-      </a>
-      {% endif %}
-      {% if current_user.role == 'client' %}
-      <a href="{{ url_for('products.list_products') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('products.') }}">
-        <i class="bi">▥</i> Mon stock
-      </a>
+      <a href="{{ url_for('products.list_products') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('products.') and 'shipment' not in request.endpoint and request.endpoint!='products.courier_stock' }}"><i class="bi bi-box-seam-fill"></i><span>Produits &amp; Stock</span></a>
+      {% elif current_user.role == 'agent_confirmation' %}
+      <a href="{{ url_for('products.list_products') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('products.') and request.endpoint!='products.courier_stock' }}"><i class="bi bi-box-seam-fill"></i><span>Catalogue &amp; Stock</span></a>
+      {% elif current_user.role == 'client' %}
+      <a href="{{ url_for('products.list_products') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('products.') and 'shipment' not in request.endpoint }}"><i class="bi bi-box-seam-fill"></i><span>Mon stock</span></a>
       {% endif %}
       {% if current_user.role in ['super_admin','moderateur','client'] %}
-      <a href="{{ url_for('shops.list_connections') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('shops.') }}">
-        <i class="bi">◈</i> Mes boutiques
-      </a>
+      <a href="{{ url_for('shops.list_connections') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('shops.') }}"><i class="bi bi-shop-window"></i><span>Mes boutiques</span></a>
       {% endif %}
-      <a href="{{ url_for('invoices.list_invoices') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('invoices.') }}">
-        <i class="bi">▦</i> {{ 'Mes factures' if current_user.role=='client' else 'Facturation' }}
-      </a>
+      <a href="{{ url_for('invoices.list_invoices') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('invoices.') }}"><i class="bi bi-receipt-cutoff"></i><span>{{ 'Mes factures' if current_user.role=='client' else 'Facturation' }}</span></a>
+
       {% if current_user.role in ['super_admin','moderateur'] %}
-      <a href="{{ url_for('users.list_users') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('users.') }}">
-        <i class="bi">◉</i> Utilisateurs
-      </a>
-      <a href="{{ url_for('settings.index') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('settings.') and request.endpoint != 'settings.profile' }}">
-        <i class="bi">⚙</i> Paramètres
-      </a>
+      <div class="td-nav-label">Administration</div>
+      <a href="{{ url_for('users.list_users') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('users.') }}"><i class="bi bi-people-fill"></i><span>Utilisateurs</span></a>
+      <a href="{{ url_for('settings.index') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('settings.') and request.endpoint not in ['settings.profile','settings.audit_log'] }}"><i class="bi bi-sliders2"></i><span>Paramètres</span></a>
       {% endif %}
       {% if current_user.role == 'super_admin' %}
-      <a href="{{ url_for('settings.audit_log') }}" class="{{ 'active' if request.endpoint=='settings.audit_log' }}">
-        <i class="bi">⌗</i> Journal d'audit
-      </a>
+      <a href="{{ url_for('settings.audit_log') }}" class="{{ 'active' if request.endpoint=='settings.audit_log' }}"><i class="bi bi-journal-text"></i><span>Journal d’audit</span></a>
       {% endif %}
     </nav>
+
+    <div class="td-sidebar-tools">
+      <div class="td-theme-switch" role="group" aria-label="Choisir le thème">
+        <button type="button" data-theme-choice="light"><i class="bi bi-sun-fill"></i><span>Clair</span></button>
+        <button type="button" data-theme-choice="dark"><i class="bi bi-moon-stars-fill"></i><span>Sombre</span></button>
+      </div>
+      <a href="{{ url_for('help.index') }}" class="td-help-link {{ 'active' if request.endpoint=='help.index' }}"><i class="bi bi-life-preserver"></i><span>Centre d’aide</span><i class="bi bi-chevron-right ms-auto"></i></a>
+    </div>
     <div class="td-sidebar-footer">
-      <a href="{{ url_for('settings.profile') }}" class="{{ 'active' if request.endpoint=='settings.profile' }}">
-        <i class="bi">●</i> Mon profil
+      <a href="{{ url_for('settings.profile') }}" class="td-profile-link {{ 'active' if request.endpoint=='settings.profile' }}">
+        <span class="td-avatar">{{ current_user.full_name[:1]|upper }}</span><span><strong>{{ current_user.full_name }}</strong><small>Mon profil</small></span>
       </a>
-      <a href="{{ url_for('auth.logout') }}"><i class="bi">⏏</i> Déconnexion</a>
+      <a href="{{ url_for('auth.logout') }}" class="td-logout" title="Déconnexion"><i class="bi bi-box-arrow-right"></i></a>
     </div>
   </aside>
 
   <div class="td-main">
     <header class="td-topbar">
       <div class="td-topbar-left">
-        <button class="td-menu-toggle" type="button" aria-label="Ouvrir le menu" aria-controls="tdSidebar" aria-expanded="false">
-          <span></span>
-          <span></span>
-          <span></span>
-        </button>
-        <div class="td-topbar-title">{% block page_title %}{% endblock %}</div>
+        <button class="td-menu-toggle" type="button" aria-label="Ouvrir le menu" aria-controls="tdSidebar" aria-expanded="false"><span></span><span></span><span></span></button>
+        <div><div class="td-topbar-title">{% block page_title %}{% endblock %}</div><div class="td-topbar-welcome">Bienvenue, {{ current_user.full_name.split(' ')[0] }}</div></div>
       </div>
       <div class="td-topbar-user">
+        <div class="td-live-clock" aria-live="polite"><i class="bi bi-clock"></i><span><strong id="tdClock">--:--</strong><small id="tdDate">--</small></span></div>
+        <button type="button" class="td-theme-quick" data-theme-toggle aria-label="Changer le thème" title="Changer le thème"><i class="bi bi-moon-stars-fill"></i></button>
         <span class="td-role-badge td-role-{{ current_user.role }}">{{ role_label(current_user.role) }}</span>
-        <span class="td-user-name">{{ current_user.full_name }}</span>
       </div>
     </header>
-    <main class="td-content">
-      {% include '_flash.html' %}
-      {% block content %}{% endblock %}
-    </main>
+    <main class="td-content">{% include '_flash.html' %}{% block content %}{% endblock %}</main>
   </div>
 </div>
 {% else %}
@@ -120,74 +109,48 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
   (() => {
-    const paramName = "_tab";
-    const storageKey = "trustdelivery_tab_id";
+    const root = document.documentElement;
+    const applyTheme = (theme) => {
+      root.dataset.theme = theme;
+      localStorage.setItem('trustdelivery_theme', theme);
+      document.querySelectorAll('[data-theme-choice]').forEach((button) => button.classList.toggle('active', button.dataset.themeChoice === theme));
+      document.querySelectorAll('[data-theme-toggle] i').forEach((icon) => icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill');
+    };
+    applyTheme(root.dataset.theme || 'light');
+    document.querySelectorAll('[data-theme-choice]').forEach((button) => button.addEventListener('click', () => applyTheme(button.dataset.themeChoice)));
+    document.querySelectorAll('[data-theme-toggle]').forEach((button) => button.addEventListener('click', () => applyTheme(root.dataset.theme === 'dark' ? 'light' : 'dark')));
+
+    const clock = document.getElementById('tdClock');
+    const date = document.getElementById('tdDate');
+    const updateClock = () => {
+      const now = new Date();
+      if (clock) clock.textContent = new Intl.DateTimeFormat('fr-FR', {hour:'2-digit', minute:'2-digit', second:'2-digit'}).format(now);
+      if (date) date.textContent = new Intl.DateTimeFormat('fr-FR', {weekday:'short', day:'2-digit', month:'short'}).format(now);
+    };
+    updateClock(); setInterval(updateClock, 1000);
+  })();
+</script>
+<script>
+  (() => {
+    const paramName = '_tab';
+    const storageKey = 'trustdelivery_tab_id';
     const currentUrl = new URL(window.location.href);
     let tabId = currentUrl.searchParams.get(paramName) || sessionStorage.getItem(storageKey);
-
-    if (!tabId) {
-      const randomPart = window.crypto && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      tabId = `td-${randomPart}`;
-    }
-
+    if (!tabId) tabId = `td-${window.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
     sessionStorage.setItem(storageKey, tabId);
-
-    if (!currentUrl.searchParams.get(paramName)) {
-      currentUrl.searchParams.set(paramName, tabId);
-      window.history.replaceState({}, "", currentUrl.toString());
-    }
-
-    const addTabParam = (url) => {
-      const nextUrl = new URL(url, window.location.origin);
-      if (nextUrl.origin !== window.location.origin) return url;
-      nextUrl.searchParams.set(paramName, tabId);
-      return nextUrl.pathname + nextUrl.search + nextUrl.hash;
-    };
-
-    document.querySelectorAll("a[href]").forEach((link) => {
-      const href = link.getAttribute("href");
-      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
-      link.setAttribute("href", addTabParam(href));
-    });
-
-    document.querySelectorAll("form").forEach((form) => {
-      form.setAttribute("action", addTabParam(form.getAttribute("action") || window.location.href));
-
-      let input = form.querySelector(`input[name="${paramName}"]`);
-      if (!input) {
-        input = document.createElement("input");
-        input.type = "hidden";
-        input.name = paramName;
-        form.appendChild(input);
-      }
-      input.value = tabId;
-    });
+    if (!currentUrl.searchParams.get(paramName)) { currentUrl.searchParams.set(paramName, tabId); history.replaceState({}, '', currentUrl.toString()); }
+    const addTabParam = (url) => { const next = new URL(url, location.origin); if (next.origin !== location.origin) return url; next.searchParams.set(paramName, tabId); return next.pathname + next.search + next.hash; };
+    document.querySelectorAll('a[href]').forEach((link) => { const href=link.getAttribute('href'); if (href && !href.startsWith('#') && !href.startsWith('mailto:') && !href.startsWith('tel:')) link.setAttribute('href', addTabParam(href)); });
+    document.querySelectorAll('form').forEach((form) => { form.setAttribute('action', addTabParam(form.getAttribute('action') || location.href)); let input=form.querySelector(`input[name="${paramName}"]`); if(!input){input=document.createElement('input');input.type='hidden';input.name=paramName;form.appendChild(input);} input.value=tabId; });
   })();
 </script>
 {% if current_user %}
 <script>
   (() => {
-    const sidebar = document.getElementById("tdSidebar");
-    const toggle = document.querySelector(".td-menu-toggle");
-    const overlay = document.querySelector(".td-sidebar-overlay");
-    const closeTargets = document.querySelectorAll("[data-sidebar-close], .td-nav a, .td-sidebar-footer a");
-
-    if (!sidebar || !toggle || !overlay) return;
-
-    const setMenuOpen = (isOpen) => {
-      document.body.classList.toggle("td-menu-open", isOpen);
-      sidebar.classList.toggle("open", isOpen);
-      overlay.classList.toggle("open", isOpen);
-      toggle.setAttribute("aria-expanded", String(isOpen));
-    };
-
-    toggle.addEventListener("click", () => setMenuOpen(!sidebar.classList.contains("open")));
-    closeTargets.forEach((target) => target.addEventListener("click", () => setMenuOpen(false)));
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") setMenuOpen(false);
-    });
+    const sidebar=document.getElementById('tdSidebar'); const toggle=document.querySelector('.td-menu-toggle'); const overlay=document.querySelector('.td-sidebar-overlay');
+    if(!sidebar || !toggle || !overlay) return;
+    const setOpen=(open)=>{document.body.classList.toggle('td-menu-open',open);sidebar.classList.toggle('open',open);overlay.classList.toggle('open',open);toggle.setAttribute('aria-expanded',String(open));};
+    toggle.addEventListener('click',()=>setOpen(!sidebar.classList.contains('open'))); document.querySelectorAll('[data-sidebar-close], .td-nav a, .td-help-link').forEach((target)=>target.addEventListener('click',()=>setOpen(false))); document.addEventListener('keydown',(event)=>{if(event.key==='Escape')setOpen(false);});
   })();
 </script>
 {% endif %}

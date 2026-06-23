@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Centre d’aide — TrustDelivery{% endblock %}
+{% block page_title %}Centre d’aide{% endblock %}
+{% block content %}
+<section class="td-help-hero">
+  <div>
+    <span class="td-help-eyebrow"><i class="bi bi-stars"></i> Aide personnalisée</span>
+    <h1>Bonjour {{ current_user.full_name.split(' ')[0] }}, comment pouvons-nous vous aider ?</h1>
+    <p>Ce guide affiche uniquement les fonctionnalités accessibles à votre compte <strong>{{ role_label(current_user.role) }}</strong>.</p>
+  </div>
+  <div class="td-help-hero-icon"><i class="bi bi-life-preserver"></i></div>
+</section>
+
+<div class="td-help-title"><span>Vos fonctionnalités</span><span>{{ role_cards|length }} rubriques</span></div>
+<div class="td-help-grid">
+  {% for card in role_cards %}
+  <article class="td-help-card">
+    <div class="td-help-card-icon"><i class="bi {{ card.icon }}"></i></div>
+    <div><h2>{{ card.title }}</h2><p>{{ card.description }}</p></div>
+  </article>
+  {% endfor %}
+</div>
+
+<div class="td-help-title"><span>Conseils utiles</span></div>
+<div class="row g-3">
+  {% for item in common_help %}
+  <div class="col-lg-6"><article class="td-card td-help-guide h-100">
+    <div class="td-help-card-icon"><i class="bi {{ item.icon }}"></i></div>
+    <h2>{{ item.title }}</h2><p>{{ item.description }}</p>
+    <ol>{% for step in item.steps %}<li>{{ step }}</li>{% endfor %}</ol>
+  </article></div>
+  {% endfor %}
+</div>
+{% endblock %}
