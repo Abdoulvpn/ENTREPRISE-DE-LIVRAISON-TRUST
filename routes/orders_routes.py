@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from datetime import datetime
 from db import get_db, log_action, create_user_notification
 from auth import roles_required, login_required
-from integrations import send_courier_notification, send_order_notification, sync_shop_status, whatsapp_link
+from integrations import send_courier_notification, send_order_notification, sync_shop_status, whatsapp_link, send_push_to_user
 
 bp = Blueprint("orders", __name__, url_prefix="/commandes")
 
@@ -551,6 +551,7 @@ def assign_livreur(order_id):
     conn = get_db()
     order = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
     livreur_id = request.form.get("livreur_id")
+    share_whatsapp = request.form.get("share_whatsapp") == "1"
     livreur = conn.execute(
         "SELECT id, full_name FROM users WHERE id=? AND role='livreur' AND is_active=1", (livreur_id,)
     ).fetchone() if livreur_id else None
@@ -578,9 +579,19 @@ def assign_livreur(order_id):
         livreur["id"], "Nouvelle livraison", f"La livraison {order['order_number']} vous est proposée.",
         url_for("orders.order_detail", order_id=order_id),
     )
+    try:
+        send_push_to_user(
+            livreur["id"], "Nouvelle livraison",
+            f"La livraison {order['order_number']} vous est proposée.",
+            f"/commandes/{order_id}",
+        )
+    except Exception:
+        pass
     notification_sent, notification_message, _direct_link = send_courier_notification(order_id, livreur["id"])
     if notification_sent is False:
         flash(notification_message, "warning")
+    if share_whatsapp and _direct_link:
+        return redirect(_direct_link)
     return redirect(url_for("orders.order_detail", order_id=order_id))
 
 

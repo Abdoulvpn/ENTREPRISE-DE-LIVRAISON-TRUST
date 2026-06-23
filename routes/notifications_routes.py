@@ -30,6 +30,24 @@ def unread_count():
     return jsonify({"count": count})
 
 
+@bp.route("/appareil", methods=["POST"])
+@login_required
+def register_device():
+    data = request.get_json(silent=True) or {}
+    token = str(data.get("token", "")).strip()
+    if len(token) < 20 or len(token) > 4096:
+        return jsonify({"error": "Jeton appareil invalide"}), 400
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO push_device_tokens (user_id, token, platform) VALUES (?,?, 'android') "
+        "ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id, is_active=1, last_seen_at=datetime('now')",
+        (g.user["id"], token),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"registered": True})
+
+
 @bp.route("/tout-lire", methods=["POST"])
 @login_required
 def mark_all_read():

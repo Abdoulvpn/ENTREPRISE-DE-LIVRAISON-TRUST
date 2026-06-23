@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.View;
@@ -40,6 +41,10 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.FirebaseOptions;
+import com.google.firebase.messaging.FirebaseMessaging;
+
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -53,6 +58,7 @@ public class MainActivity extends Activity {
     private static final int PERMISSION_REQUEST = 502;
     private static final String PREFS = "trustdelivery_mobile";
     private static final String PREF_URL = "server_url";
+    private static final String PREF_TAB_ID = "web_tab_id";
 
     private WebView webView;
     private SwipeRefreshLayout swipeRefresh;
@@ -60,6 +66,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraOutputUri;
     private String serverUrl;
+    private String firebaseToken = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,13 +77,15 @@ public class MainActivity extends Activity {
         buildInterface();
         configureWebView();
         requestUsefulPermissions();
+        configureFirebase();
+        TrustFirebaseMessagingService.ensureChannel(this);
 
         String savedUrl = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_URL, "");
         serverUrl = normalizeUrl(!savedUrl.isEmpty() ? savedUrl : BuildConfig.WEB_APP_URL);
         if (serverUrl.isEmpty()) {
             askForServerUrl(false);
         } else {
-            webView.loadUrl(serverUrl);
+            loadAppPage(getIntent());
         }
     }
 
@@ -156,7 +165,7 @@ public class MainActivity extends Activity {
             serverUrl = candidate;
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_URL, serverUrl).apply();
             dialog.dismiss();
-            webView.loadUrl(serverUrl);
+            loadAppPage(getIntent());
         }));
         dialog.show();
     }
@@ -174,7 +183,68 @@ public class MainActivity extends Activity {
         for (String permission : new String[]{Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION}) {
             if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) missing.add(permission);
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.POST_NOTIFICATIONS);
+        }
         if (!missing.isEmpty()) ActivityCompat.requestPermissions(this, missing.toArray(new String[0]), PERMISSION_REQUEST);
+    }
+
+    private void configureFirebase() {
+        if (BuildConfig.FIREBASE_APPLICATION_ID.isEmpty() || BuildConfig.FIREBASE_API_KEY.isEmpty() ||
+                BuildConfig.FIREBASE_PROJECT_ID.isEmpty() || BuildConfig.FIREBASE_SENDER_ID.isEmpty()) return;
+        try {
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                FirebaseOptions options = new FirebaseOptions.Builder()
+                        .setApplicationId(BuildConfig.FIREBASE_APPLICATION_ID)
+                        .setApiKey(BuildConfig.FIREBASE_API_KEY)
+                        .setProjectId(BuildConfig.FIREBASE_PROJECT_ID)
+                        .setGcmSenderId(BuildConfig.FIREBASE_SENDER_ID)
+                        .build();
+                FirebaseApp.initializeApp(this, options);
+            }
+            firebaseToken = getSharedPreferences(PREFS, MODE_PRIVATE).getString(
+                    TrustFirebaseMessagingService.PREF_FIREBASE_TOKEN, ""
+            );
+            FirebaseMessaging.getInstance().getToken().addOnSuccessListener(token -> {
+                firebaseToken = token;
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putString(TrustFirebaseMessagingService.PREF_FIREBASE_TOKEN, token).apply();
+                registerPushToken();
+            });
+        } catch (Exception ignored) {
+            firebaseToken = "";
+        }
+    }
+
+    private void registerPushToken() {
+        if (firebaseToken.isEmpty() || webView == null || webView.getUrl() == null ||
+                !webView.getUrl().startsWith(serverUrl)) return;
+        String quotedToken = org.json.JSONObject.quote(firebaseToken);
+        String script = "(()=>{const u=new URL(location.href);const t=u.searchParams.get('_tab')||'';" +
+                "fetch('/notifications/appareil?_tab='+encodeURIComponent(t),{" +
+                "method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'}," +
+                "body:JSON.stringify({token:" + quotedToken + "})}).catch(()=>{});})()";
+        webView.evaluateJavascript(script, null);
+    }
+
+    private void loadAppPage(Intent intent) {
+        String link = intent == null ? "" : intent.getStringExtra("link");
+        if (link != null && link.startsWith("/") && !link.startsWith("//")) {
+            String target = serverUrl + link;
+            String tabId = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_TAB_ID, "");
+            if (!tabId.isEmpty()) target = Uri.parse(target).buildUpon().appendQueryParameter("_tab", tabId).build().toString();
+            webView.loadUrl(target);
+        } else {
+            webView.loadUrl(serverUrl);
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (!serverUrl.isEmpty()) loadAppPage(intent);
     }
 
     private class TrustWebViewClient extends WebViewClient {
@@ -209,6 +279,13 @@ public class MainActivity extends Activity {
         public void onPageFinished(WebView view, String url) {
             swipeRefresh.setRefreshing(false);
             progressBar.setVisibility(View.GONE);
+            try {
+                String tabId = Uri.parse(url).getQueryParameter("_tab");
+                if (tabId != null && !tabId.isEmpty()) {
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_TAB_ID, tabId).apply();
+                }
+            } catch (Exception ignored) {}
+            registerPushToken();
         }
 
         @Override

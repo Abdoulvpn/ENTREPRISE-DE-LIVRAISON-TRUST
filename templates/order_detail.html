@@ -101,6 +101,7 @@
             <option value="">— Choisir un livreur —</option>
             {% for l in livreurs %}<option value="{{ l.id }}">{{ l.full_name }} ({{ l.zone or 'zone non définie' }})</option>{% endfor %}
           </select>
+          <label class="td-whatsapp-share-option mb-2"><input type="checkbox" name="share_whatsapp" value="1" checked><i class="bi bi-whatsapp"></i><span>Ouvrir WhatsApp et envoyer la livraison</span></label>
           <button type="submit" class="btn td-btn-accent w-100">Affecter le livreur</button>
         </form>
       {% endif %}

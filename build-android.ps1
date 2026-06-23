@@ -1,5 +1,9 @@
 param(
-    [string]$SiteUrl = ""
+    [string]$SiteUrl = "",
+    [string]$FirebaseApplicationId = "",
+    [string]$FirebaseApiKey = "",
+    [string]$FirebaseProjectId = "",
+    [string]$FirebaseSenderId = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,7 +22,9 @@ if (-not (Test-Path $gradle) -or -not (Test-Path $javaHome) -or -not (Test-Path 
 $env:JAVA_HOME = $javaHome
 $env:ANDROID_HOME = $androidHome
 $env:ANDROID_SDK_ROOT = $androidHome
-$env:GRADLE_USER_HOME = Join-Path $root ".tools\gradle-home"
+# Le cache dans LOCALAPPDATA évite les verrouillages de fichiers observés sur
+# certains disques de projet Windows tout en restant propre à l'utilisateur.
+$env:GRADLE_USER_HOME = Join-Path $env:LOCALAPPDATA "TrustDelivery\gradle-cache"
 
 $arguments = @(
     "-p", $project,
@@ -29,6 +35,15 @@ $arguments = @(
 )
 if ($SiteUrl) {
     $arguments += "-PTRUSTDELIVERY_URL=$SiteUrl"
+}
+$firebaseProperties = @{
+    "FIREBASE_APPLICATION_ID" = $FirebaseApplicationId
+    "FIREBASE_API_KEY" = $FirebaseApiKey
+    "FIREBASE_PROJECT_ID" = $FirebaseProjectId
+    "FIREBASE_SENDER_ID" = $FirebaseSenderId
+}
+foreach ($entry in $firebaseProperties.GetEnumerator()) {
+    if ($entry.Value) { $arguments += "-P$($entry.Key)=$($entry.Value)" }
 }
 
 & $gradle @arguments

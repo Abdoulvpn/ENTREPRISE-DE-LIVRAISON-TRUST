@@ -52,6 +52,21 @@ powershell -ExecutionPolicy Bypass -File .\build-android.ps1 -SiteUrl "https://v
 
 Sans `-SiteUrl`, l'application demandera l'adresse du site au premier lancement.
 
+## Notifications Android en arrière-plan
+
+Les nouvelles affectations peuvent produire une notification Android sonore, même
+si l'APK est fermé. Créez un projet Firebase, ajoutez l'application Android
+`com.trustdelivery.mobile`, puis fournissez au build les valeurs Mobile App ID,
+Web API Key, Project ID et Sender ID. Le serveur doit recevoir le compte de service
+Firebase dans la variable secrète :
+
+```text
+FIREBASE_SERVICE_ACCOUNT_JSON={...JSON complet du compte de service...}
+```
+
+Le jeton de l'appareil est associé automatiquement au livreur après sa connexion
+dans l'APK. Le compte de service ne doit jamais être ajouté au dépôt Git.
+
 La base de données (`trustdelivery.db`) et les comptes de démonstration sont créés
 automatiquement au premier démarrage.
 
@@ -119,6 +134,13 @@ en production.
   (ex. Gunicorn) derrière Nginx, avec HTTPS/SSL — voir le cahier des charges.
 - Si vous attendez un volume important d'utilisateurs/commandes simultanés, migrez la
   base SQLite vers PostgreSQL (la structure des requêtes reste très proche).
+- Ne déployez jamais SQLite sans volume persistant. Sur Render, le dépôt utilise
+  `/var/data/trustdelivery.db`. Sur Railway, créez un volume monté sur `/data` puis
+  définissez `DATABASE_PATH=/data/trustdelivery.db`. L'application refuse désormais
+  de démarrer sur un disque éphémère afin d'éviter un redéploiement destructeur.
+- Une sauvegarde cohérente est créée automatiquement chaque jour dans le dossier
+  `backups` du volume (10 versions conservées). Le Super Administrateur peut aussi
+  télécharger une sauvegarde depuis **Paramètres**.
 
 ## Configuration des boutiques et notifications
 

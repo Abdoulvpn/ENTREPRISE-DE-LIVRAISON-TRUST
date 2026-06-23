@@ -11,7 +11,7 @@ TEST_DIR = tempfile.mkdtemp(prefix="trustdelivery-tests-")
 os.environ["DATABASE_PATH"] = os.path.join(TEST_DIR, "test.db")
 
 from app import app  # noqa: E402
-from db import get_db  # noqa: E402
+from db import get_db, backup_database, init_db  # noqa: E402
 from routes.shop_routes import normalize_order_payload  # noqa: E402
 from integrations import send_order_notification, sync_shop_status  # noqa: E402
 
@@ -121,6 +121,35 @@ class ClientIsolationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Stock Client Beta", response.data)
         self.assertNotIn(b"Stock Client Alpha", response.data)
+
+    def test_database_backup_is_valid_and_reset_is_blocked(self):
+        backup_path = backup_database(force=True)
+        self.assertTrue(os.path.exists(backup_path))
+        backup_conn = __import__("sqlite3").connect(backup_path)
+        self.assertEqual(backup_conn.execute("PRAGMA quick_check").fetchone()[0], "ok")
+        backup_conn.close()
+        with self.assertRaises(RuntimeError):
+            init_db(reset=True)
+
+    def test_required_daouda_admin_survives_schema_updates(self):
+        init_db()
+        conn = get_db()
+        admin = conn.execute(
+            "SELECT role, is_active FROM users WHERE lower(email)=?",
+            ("daoudabangoura@trustdelivery.com",),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(admin)
+        self.assertEqual(admin["role"], "super_admin")
+        self.assertEqual(admin["is_active"], 1)
+
+    def test_super_admin_can_download_database_backup(self):
+        client = self.logged_client(self.admin_id)
+        response = client.get("/parametres/sauvegarde-base?_tab=test-tab")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response.headers.get("Content-Disposition", ""))
+        self.assertTrue(response.data.startswith(b"SQLite format 3"))
+        response.close()
 
     def test_order_rejects_another_clients_product(self):
         client = self.logged_client(self.first_client_id)
@@ -264,6 +293,41 @@ class ClientIsolationTests(unittest.TestCase):
         order = conn.execute("SELECT status FROM orders WHERE id=?", (self.notify_order_id,)).fetchone()
         conn.close()
         self.assertEqual(order["status"], "proposee")
+
+    def test_dispatch_can_open_local_whatsapp_and_send_android_push(self):
+        conn = get_db()
+        order_id = conn.execute(
+            "INSERT INTO orders (order_number, client_id, status, zone_id, recipient_name, delivery_address) "
+            "VALUES (?,?,?,?,?,?)",
+            ("CMD-WHATSAPP-LOCAL", self.first_client_id, "confirmee", self.zone_id, "Client local", "Kaloum"),
+        ).lastrowid
+        conn.commit()
+        conn.close()
+        client = self.logged_client(self.admin_id)
+        with patch(
+            "routes.orders_routes.send_courier_notification",
+            return_value=(None, "WhatsApp local", "https://wa.me/224620000099?text=Livraison"),
+        ), patch("routes.orders_routes.send_push_to_user", return_value=1) as push:
+            response = client.post(
+                f"/commandes/{order_id}/affecter?_tab=test-tab",
+                data={"livreur_id": self.courier_id, "share_whatsapp": "1"},
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].startswith("https://wa.me/"))
+        push.assert_called_once()
+
+    def test_android_device_token_is_scoped_to_logged_in_user(self):
+        client = self.logged_client(self.first_client_id)
+        token = "fcm-test-token-" + ("x" * 40)
+        response = client.post(
+            "/notifications/appareil?_tab=test-tab", json={"token": token}
+        )
+        self.assertEqual(response.status_code, 200)
+        conn = get_db()
+        row = conn.execute("SELECT user_id, is_active FROM push_device_tokens WHERE token=?", (token,)).fetchone()
+        conn.close()
+        self.assertEqual(row["user_id"], self.first_client_id)
+        self.assertEqual(row["is_active"], 1)
 
     def test_notification_webhook_receives_recipient_and_message(self):
         response = MagicMock()

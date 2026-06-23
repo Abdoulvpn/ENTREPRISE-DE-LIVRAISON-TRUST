@@ -491,6 +491,9 @@ table.td-table tr:hover td { background: #fafbff; }
 .td-resend-button { color:var(--td-blue); font-size:12px; font-weight:700; text-decoration:none; }
 .td-otp-security { display:flex; gap:8px; align-items:flex-start; margin-top:18px; padding-top:14px; border-top:1px solid var(--td-border); color:var(--td-text-muted); font-size:10px; line-height:1.5; }
 .td-otp-security i { color:var(--td-blue); }
+.td-whatsapp-share-option { display:flex; align-items:center; gap:8px; padding:9px 10px; border:1px solid rgba(37,211,102,.3); border-radius:10px; color:var(--td-text); background:rgba(37,211,102,.08); cursor:pointer; font-size:11px; font-weight:700; }
+.td-whatsapp-share-option input { accent-color:#18a957; }
+.td-whatsapp-share-option i { color:#18a957; font-size:16px; }
 .td-notification-list { display:grid; gap:10px; }
 .td-notification-item { display:flex; align-items:center; gap:14px; padding:15px 17px; border:1px solid var(--td-border); border-radius:15px; background:var(--td-card); box-shadow:0 3px 12px rgba(16,42,86,.03); }
 .td-notification-item.unread { border-left:4px solid var(--td-blue); background:color-mix(in srgb,var(--td-blue) 5%,var(--td-card)); }

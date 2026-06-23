@@ -3,6 +3,13 @@
 {% block page_title %}Paramètres &amp; Configuration{% endblock %}
 {% block content %}
 
+{% if current_user.role == 'super_admin' %}
+<div class="td-card d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+  <div><strong><i class="bi bi-database-check text-success"></i> Protection des données active</strong><p class="td-muted mb-0 mt-1" style="font-size:12px">Sauvegardes automatiques quotidiennes et contrôle d’intégrité au démarrage.</p></div>
+  <a href="{{ url_for('settings.download_database_backup') }}" class="btn td-btn-primary"><i class="bi bi-download"></i> Télécharger une sauvegarde</a>
+</div>
+{% endif %}
+
 <div class="row g-3">
   <div class="col-lg-6">
     <div class="td-section-title">Statuts des commandes</div>

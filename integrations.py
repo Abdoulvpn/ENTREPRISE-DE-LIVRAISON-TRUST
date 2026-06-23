@@ -10,6 +10,56 @@ from urllib.request import Request, urlopen
 from db import get_db
 
 
+def get_firebase_app():
+    """Initialise Firebase Admin à la demande, sans conserver le secret en base."""
+    import firebase_admin
+    from firebase_admin import credentials
+
+    try:
+        return firebase_admin.get_app()
+    except ValueError:
+        raw_credentials = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+        if raw_credentials:
+            return firebase_admin.initialize_app(credentials.Certificate(json.loads(raw_credentials)))
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            return firebase_admin.initialize_app()
+        raise ValueError("Firebase Cloud Messaging n'est pas configuré.")
+
+
+def send_push_to_user(user_id, title, body, link=""):
+    """Envoie une notification sonore haute priorité à tous les appareils actifs du compte."""
+    from firebase_admin import messaging
+
+    conn = get_db()
+    tokens = conn.execute(
+        "SELECT token FROM push_device_tokens WHERE user_id=? AND is_active=1", (user_id,)
+    ).fetchall()
+    conn.close()
+    if not tokens:
+        return 0
+    app = get_firebase_app()
+    delivered = 0
+    for row in tokens:
+        message = messaging.Message(
+            token=row["token"],
+            notification=messaging.Notification(title=title, body=body),
+            data={"link": link or "/"},
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    sound="default", channel_id="trustdelivery_deliveries"
+                ),
+            ),
+        )
+        try:
+            messaging.send(message, app=app)
+            delivered += 1
+        except Exception:
+            # Une panne FCM ne doit jamais annuler l'affectation métier.
+            continue
+    return delivered
+
+
 def valid_store_url(value):
     if not value:
         return True

@@ -10,6 +10,10 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true
+      - key: DATABASE_PATH
+        value: /var/data/trustdelivery.db
+      - key: REQUIRE_PERSISTENT_DATABASE
+        value: "1"
     disk:
       name: trustdelivery-disk
       mountPath: /var/data

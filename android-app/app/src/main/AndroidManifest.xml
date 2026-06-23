@@ -29,6 +29,18 @@
             </intent-filter>
         </activity>
 
+        <service
+            android:name=".TrustFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_notification" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/td_orange" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="trustdelivery_deliveries" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

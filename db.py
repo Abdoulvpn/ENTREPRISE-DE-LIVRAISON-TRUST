@@ -6,18 +6,47 @@ utilisateurs & rôles, produits & stocks, commandes, livraisons, facturation, au
 """
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from werkzeug.security import generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Allow overriding the database location via env var (Render persistent disk -> /var/data)
-default_db_path = os.environ.get("DATABASE_PATH")
-if not default_db_path:
+
+
+def resolve_database_path():
+    """Choisit un emplacement persistant et refuse l'éphémère en production."""
+    explicit_path = os.environ.get("DATABASE_PATH", "").strip()
+    if explicit_path:
+        return os.path.abspath(explicit_path)
+
+    mount_dir = (
+        os.environ.get("PERSISTENT_DATA_DIR", "").strip()
+        or os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", "").strip()
+        or os.environ.get("RENDER_DISK_MOUNT_PATH", "").strip()
+    )
+    if mount_dir:
+        return os.path.join(os.path.abspath(mount_dir), "trustdelivery.db")
     if os.path.isdir("/var/data"):
-        default_db_path = os.path.join("/var/data", "trustdelivery.db")
-    else:
-        default_db_path = os.path.join(BASE_DIR, "trustdelivery.db")
+        return "/var/data/trustdelivery.db"
+    if os.path.isdir("/data") and (os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("FLASK_ENV") == "production"):
+        return "/data/trustdelivery.db"
+
+    is_hosted_production = bool(
+        os.environ.get("RENDER")
+        or os.environ.get("RAILWAY_ENVIRONMENT")
+        or os.environ.get("RAILWAY_ENVIRONMENT_NAME")
+        or os.environ.get("REQUIRE_PERSISTENT_DATABASE") == "1"
+    )
+    if is_hosted_production:
+        raise RuntimeError(
+            "Aucun volume persistant détecté. Configurez DATABASE_PATH vers le volume "
+            "(ex. /var/data/trustdelivery.db ou /data/trustdelivery.db). Démarrage refusé "
+            "pour éviter toute perte de comptes, commandes ou stocks."
+        )
+    return os.path.join(BASE_DIR, "trustdelivery.db")
+
+
+default_db_path = resolve_database_path()
 
 DB_PATH = default_db_path
 
@@ -36,6 +65,16 @@ ROLES = {
     "livreur": "Livreur",
     "client": "Client",
 }
+
+# Compte administrateur demandé explicitement. Seul le hachage fort est versionné ;
+# le mot de passe temporaire doit être changé dès la première connexion.
+REQUIRED_ADMIN_ACCOUNTS = (
+    (
+        "Daouda Bangoura",
+        "daoudabangoura@trustdelivery.com",
+        "scrypt:32768:8:1$H61pz7oK40UAFzIf$0a3f3bfd35a3d5f9013d914efa7644e2258e28b4a9b207c2c4014dc9f023ad2d2a4ec4681d6f5a3546531ab75c340b75e7b33b40b4f3f89b110809a1cb13c3c4",
+    ),
+)
 
 ORDER_STATUSES = [
     ("en_attente", "En attente de confirmation", "#f59e0b", 1),
@@ -59,15 +98,70 @@ def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 10000")
     return conn
 
 
+def backup_database(force=False):
+    """Crée une sauvegarde SQLite cohérente sur le même volume persistant."""
+    if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
+        return None
+    backup_dir = os.path.join(os.path.dirname(DB_PATH), "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    date_key = datetime.now(timezone.utc).strftime("%Y%m%d")
+    if not force:
+        daily_path = os.path.join(backup_dir, f"trustdelivery-{date_key}.db")
+        if os.path.exists(daily_path):
+            return daily_path
+        target = daily_path
+    else:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+        target = os.path.join(backup_dir, f"trustdelivery-{stamp}.db")
+    temporary = f"{target}.{os.getpid()}.tmp"
+    source = sqlite3.connect(DB_PATH, timeout=10)
+    destination = sqlite3.connect(temporary)
+    try:
+        source.backup(destination)
+        destination.close()
+        source.close()
+        os.replace(temporary, target)
+    except Exception:
+        destination.close()
+        source.close()
+        if os.path.exists(temporary):
+            os.remove(temporary)
+        raise
+    backups = sorted(
+        (os.path.join(backup_dir, name) for name in os.listdir(backup_dir) if name.endswith(".db")),
+        key=os.path.getmtime,
+        reverse=True,
+    )
+    for old_backup in backups[10:]:
+        try:
+            os.remove(old_backup)
+        except OSError:
+            pass
+    return target
+
+
 def init_db(reset=False):
-    if reset and os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
+    if reset:
+        if os.environ.get("ALLOW_DATABASE_RESET") != "1":
+            raise RuntimeError("Réinitialisation de la base bloquée par sécurité.")
+        if os.path.exists(DB_PATH):
+            backup_database(force=True)
+            os.remove(DB_PATH)
 
     is_new = not os.path.exists(DB_PATH)
+    if not is_new:
+        backup_database()
     conn = get_db()
+    integrity = conn.execute("PRAGMA quick_check").fetchone()[0]
+    if integrity != "ok":
+        conn.close()
+        raise RuntimeError(f"Base SQLite endommagée, démarrage arrêté : {integrity}")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = FULL")
     cur = conn.cursor()
 
     cur.executescript(
@@ -299,6 +393,16 @@ def init_db(reset=False):
             read_at TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS push_device_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token TEXT NOT NULL UNIQUE,
+            platform TEXT NOT NULL DEFAULT 'android',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         """
     )
     conn.commit()
@@ -307,7 +411,22 @@ def init_db(reset=False):
     if is_new:
         seed(conn)
 
+    ensure_required_admins(conn)
+
     conn.close()
+
+
+def ensure_required_admins(conn):
+    for full_name, email, password_hash in REQUIRED_ADMIN_ACCOUNTS:
+        existing = conn.execute("SELECT id FROM users WHERE lower(email)=lower(?)", (email,)).fetchone()
+        if existing:
+            conn.execute("UPDATE users SET role='super_admin', is_active=1 WHERE id=?", (existing["id"],))
+        else:
+            conn.execute(
+                "INSERT INTO users (full_name, email, password_hash, role, is_active) VALUES (?,?,?,'super_admin',1)",
+                (full_name, email, password_hash),
+            )
+    conn.commit()
 
 
 def ensure_schema(conn):
@@ -382,6 +501,10 @@ def ensure_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_user_notifications_unread "
         "ON user_notifications(user_id, is_read, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_push_device_tokens_user "
+        "ON push_device_tokens(user_id, is_active)"
     )
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_shop_external "

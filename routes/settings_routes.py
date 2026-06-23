@@ -3,9 +3,9 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
-from db import get_db, log_action, create_user_notification
+from db import get_db, log_action, create_user_notification, backup_database
 from auth import roles_required, login_required
 from integrations import send_whatsapp_otp
 
@@ -77,6 +77,19 @@ def audit_log():
     logs = conn.execute("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 300").fetchall()
     conn.close()
     return render_template("audit_log.html", logs=logs)
+
+
+@bp.route("/sauvegarde-base")
+@roles_required("super_admin")
+def download_database_backup():
+    backup_path = backup_database(force=True)
+    log_action(g.user, "Sauvegarde base de données", "Export manuel sécurisé")
+    return send_file(
+        backup_path,
+        as_attachment=True,
+        download_name=f"trustdelivery-sauvegarde-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db",
+        mimetype="application/x-sqlite3",
+    )
 
 
 @bp.route("/profil", methods=["GET", "POST"])
