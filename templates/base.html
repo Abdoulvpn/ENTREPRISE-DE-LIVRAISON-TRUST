@@ -95,6 +95,9 @@
       </div>
       <div class="td-topbar-user">
         <div class="td-live-clock" aria-live="polite"><i class="bi bi-clock"></i><span><strong id="tdClock">--:--</strong><small id="tdDate">--</small></span></div>
+        <a href="{{ url_for('notifications.index') }}" class="td-notification-button" aria-label="Notifications" title="Notifications">
+          <i class="bi bi-bell-fill"></i><span class="td-notification-badge" id="tdNotificationBadge" hidden>0</span>
+        </a>
         <button type="button" class="td-theme-quick" data-theme-toggle aria-label="Changer le thème" title="Changer le thème"><i class="bi bi-moon-stars-fill"></i></button>
         <span class="td-role-badge td-role-{{ current_user.role }}">{{ role_label(current_user.role) }}</span>
       </div>
@@ -128,6 +131,22 @@
       if (date) date.textContent = new Intl.DateTimeFormat('fr-FR', {weekday:'short', day:'2-digit', month:'short'}).format(now);
     };
     updateClock(); setInterval(updateClock, 1000);
+
+    const badge = document.getElementById('tdNotificationBadge');
+    const updateNotifications = async () => {
+      if (!badge || document.hidden) return;
+      try {
+        const response = await fetch('{{ url_for("notifications.unread_count") }}', {headers:{'Accept':'application/json'}, credentials:'same-origin'});
+        if (!response.ok) return;
+        const data = await response.json();
+        const count = Number(data.count || 0);
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.hidden = count === 0;
+        badge.parentElement.setAttribute('aria-label', count ? `${count} notification${count > 1 ? 's' : ''} non lue${count > 1 ? 's' : ''}` : 'Aucune notification non lue');
+      } catch (_) { /* Le badge sera actualisé au prochain passage réseau. */ }
+    };
+    updateNotifications(); setInterval(updateNotifications, 15000);
+    document.addEventListener('visibilitychange', updateNotifications);
   })();
 </script>
 <script>

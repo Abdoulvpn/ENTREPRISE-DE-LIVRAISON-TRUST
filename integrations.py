@@ -132,6 +132,42 @@ def whatsapp_link(phone, message):
     return f"https://wa.me/{recipient}?text={quote(message)}"
 
 
+def send_whatsapp_otp(phone, otp):
+    """Envoie un OTP avec un modèle d'authentification WhatsApp approuvé par Meta."""
+    recipient = re.sub(r"\D", "", phone or "")
+    token = os.environ.get("META_WHATSAPP_TOKEN", "").strip()
+    phone_number_id = os.environ.get("META_WHATSAPP_PHONE_NUMBER_ID", "").strip()
+    template_name = os.environ.get("META_WHATSAPP_OTP_TEMPLATE", "trustdelivery_otp").strip()
+    template_language = os.environ.get("META_WHATSAPP_OTP_LANGUAGE", "fr").strip()
+    if not token or not phone_number_id:
+        raise ValueError("WhatsApp Business Cloud API n'est pas configurée.")
+    graph_version = os.environ.get("META_GRAPH_API_VERSION", "v23.0")
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": recipient,
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {"code": template_language},
+            "components": [
+                {"type": "body", "parameters": [{"type": "text", "text": otp}]},
+                {
+                    "type": "button",
+                    "sub_type": "url",
+                    "index": "0",
+                    "parameters": [{"type": "text", "text": otp}],
+                },
+            ],
+        },
+    }
+    return post_json(
+        f"https://graph.facebook.com/{graph_version}/{quote(phone_number_id)}/messages",
+        payload,
+        {"Authorization": f"Bearer {token}"},
+        timeout=12,
+    )
+
+
 def send_courier_notification(order_id, courier_id):
     conn = get_db()
     row = conn.execute(

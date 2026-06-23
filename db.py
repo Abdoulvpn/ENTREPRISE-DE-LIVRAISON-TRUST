@@ -7,6 +7,7 @@ utilisateurs & rôles, produits & stocks, commandes, livraisons, facturation, au
 import sqlite3
 import os
 from datetime import datetime
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from werkzeug.security import generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -273,6 +274,31 @@ def init_db(reset=False):
             created_by INTEGER REFERENCES users(id),
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS whatsapp_verifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+            phone_number TEXT NOT NULL,
+            otp_hash TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            is_verified INTEGER NOT NULL DEFAULT 0,
+            verified_at TEXT,
+            last_sent_at TEXT NOT NULL,
+            failed_attempts INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS user_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            link TEXT,
+            is_read INTEGER NOT NULL DEFAULT 0,
+            read_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         """
     )
     conn.commit()
@@ -352,6 +378,10 @@ def ensure_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_courier_locations_order_time "
         "ON courier_locations(order_id, recorded_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_notifications_unread "
+        "ON user_notifications(user_id, is_read, created_at DESC)"
     )
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_shop_external "
@@ -465,6 +495,23 @@ def log_action(user, action, details=""):
     conn.execute(
         "INSERT INTO audit_log (user_id, user_name, action, details) VALUES (?,?,?,?)",
         (user["id"] if user else None, user["full_name"] if user else "Système", action, details),
+    )
+    conn.commit()
+    conn.close()
+
+
+def create_user_notification(user_id, title, message, link=""):
+    """Crée une notification interne sans exposer de données sensibles."""
+    safe_link = ""
+    if link:
+        parsed = urlsplit(link)
+        if not parsed.scheme and not parsed.netloc and parsed.path.startswith("/") and not parsed.path.startswith("//"):
+            query = urlencode([(key, value) for key, value in parse_qsl(parsed.query) if key != "_tab"])
+            safe_link = urlunsplit(("", "", parsed.path, query, parsed.fragment))
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO user_notifications (user_id, title, message, link) VALUES (?,?,?,?)",
+        (user_id, title[:120], message[:500], safe_link[:500] if safe_link else None),
     )
     conn.commit()
     conn.close()

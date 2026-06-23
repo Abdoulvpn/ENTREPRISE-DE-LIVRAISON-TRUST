@@ -12,6 +12,46 @@ python app.py
 
 Puis ouvrez **http://127.0.0.1:5000** dans votre navigateur.
 
+## Application Android (APK WebView)
+
+Le dossier `android-app/` contient une application Android native qui affiche
+TrustDelivery dans une WebView sécurisée. Elle prend en charge les sessions, les
+uploads caméra/galerie, la géolocalisation des livreurs, les téléchargements, le
+bouton retour, l'actualisation par glissement et un écran hors connexion.
+
+### Générer l'APK avec GitHub
+
+1. Ouvrez l'onglet **Actions** du dépôt GitHub.
+2. Sélectionnez **Build Android APK**, puis **Run workflow**.
+3. Renseignez l'URL HTTPS publique du site, ou laissez-la vide pour que l'APK la
+   demande au premier lancement.
+4. Téléchargez l'artefact **TrustDelivery-Android** à la fin de l'exécution.
+
+Le fichier contenu dans l'artefact se nomme `TrustDelivery.apk`. Android peut
+demander d'autoriser l'installation d'applications provenant du navigateur ou du
+gestionnaire de fichiers utilisé.
+
+### Générer avec Android Studio
+
+Ouvrez le dossier `android-app/`, attendez la synchronisation Gradle, puis utilisez
+**Build > Build APK(s)**. Pour intégrer directement l'adresse du serveur :
+
+```bash
+gradle :app:assembleDebug -PTRUSTDELIVERY_URL=https://votre-site.com
+```
+
+Pour changer ultérieurement l'adresse mémorisée, effectuez un appui long dans
+l'application et saisissez la nouvelle URL.
+
+Sur la machine de développement configurée, une nouvelle compilation locale se
+lance simplement avec :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-android.ps1 -SiteUrl "https://votre-site.com"
+```
+
+Sans `-SiteUrl`, l'application demandera l'adresse du site au premier lancement.
+
 La base de données (`trustdelivery.db`) et les comptes de démonstration sont créés
 automatiquement au premier démarrage.
 
@@ -92,6 +132,21 @@ en production.
    - `NOTIFICATION_WEBHOOK_URL` pour un fournisseur SMS/WhatsApp ou une automatisation ;
    - `META_WHATSAPP_TOKEN` et `META_WHATSAPP_PHONE_NUMBER_ID` pour WhatsApp Cloud API ;
    - `META_GRAPH_API_VERSION` permet de remplacer la version Graph utilisée par défaut.
+
+### Liaison WhatsApp par OTP
+
+La vérification d'un numéro utilise un modèle d'authentification préalablement
+approuvé dans WhatsApp Manager. Configurez les variables suivantes :
+
+- `META_WHATSAPP_TOKEN` : jeton permanent WhatsApp Business Cloud API ;
+- `META_WHATSAPP_PHONE_NUMBER_ID` : identifiant du numéro émetteur ;
+- `META_WHATSAPP_OTP_TEMPLATE` : nom du modèle, `trustdelivery_otp` par défaut ;
+- `META_WHATSAPP_OTP_LANGUAGE` : langue approuvée du modèle, `fr` par défaut ;
+- `META_GRAPH_API_VERSION` : version Graph utilisée par l'intégration.
+
+Le modèle d'authentification doit contenir le paramètre OTP dans le corps et un
+bouton de copie du code. TrustDelivery ne conserve que le hachage du code, limite
+les tentatives et impose un délai avant le renvoi.
 
 Pour Shopify, renseignez l'URL de la boutique et placez le jeton Admin API dans le
 champ **Secret ou jeton API**. `SHOPIFY_API_VERSION` permet de choisir la version de

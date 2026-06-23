@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 TEST_DIR = tempfile.mkdtemp(prefix="trustdelivery-tests-")
@@ -448,6 +448,58 @@ class ClientIsolationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Tableau de bord partenaire", response.data)
         self.assertIn(b"/api/v1/commandes", response.data)
+
+    def test_whatsapp_otp_is_hashed_verified_and_updates_notification_badge(self):
+        conn = get_db()
+        conn.execute("DELETE FROM whatsapp_verifications WHERE user_id=?", (self.first_client_id,))
+        conn.execute("DELETE FROM user_notifications WHERE user_id=?", (self.first_client_id,))
+        conn.commit()
+        conn.close()
+        client = self.logged_client(self.first_client_id)
+
+        with patch("routes.settings_routes.send_whatsapp_otp", return_value={"messages": [{"id": "wamid.test"}]}) as sender:
+            response = client.post(
+                "/parametres/profil/whatsapp/envoyer?_tab=test-tab",
+                data={"whatsapp_phone": "+224 620 00 00 01"},
+            )
+            self.assertEqual(response.status_code, 302)
+            otp = sender.call_args.args[1]
+            self.assertRegex(otp, r"^\d{6}$")
+
+            resend = client.post(
+                "/parametres/profil/whatsapp/envoyer?_tab=test-tab",
+                data={"whatsapp_phone": "224620000001"},
+            )
+            self.assertEqual(resend.status_code, 302)
+            self.assertEqual(sender.call_count, 1)
+
+        conn = get_db()
+        stored = conn.execute(
+            "SELECT * FROM whatsapp_verifications WHERE user_id=?", (self.first_client_id,)
+        ).fetchone()
+        conn.close()
+        self.assertNotEqual(stored["otp_hash"], otp)
+        self.assertTrue(check_password_hash(stored["otp_hash"], otp))
+        self.assertNotIn(otp.encode(), client.get("/parametres/profil?_tab=test-tab").data)
+
+        invalid = client.post(
+            "/parametres/profil/whatsapp/verifier?_tab=test-tab", data={"otp": "000000"}
+        )
+        self.assertEqual(invalid.status_code, 302)
+        verified = client.post(
+            "/parametres/profil/whatsapp/verifier?_tab=test-tab", data={"otp": otp}
+        )
+        self.assertEqual(verified.status_code, 302)
+        profile = client.get("/parametres/profil?_tab=test-tab")
+        self.assertIn("WhatsApp lié avec succès".encode(), profile.data)
+
+        badge = client.get("/notifications/non-lues?_tab=test-tab")
+        self.assertEqual(badge.status_code, 200)
+        self.assertEqual(badge.get_json()["count"], 1)
+        conn = get_db()
+        user = conn.execute("SELECT whatsapp_phone FROM users WHERE id=?", (self.first_client_id,)).fetchone()
+        conn.close()
+        self.assertEqual(user["whatsapp_phone"], "224620000001")
 
 
 if __name__ == "__main__":

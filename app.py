@@ -10,13 +10,14 @@ import db as db_module
 from auth import load_logged_in_user, role_label
 from db import ROLES
 
-from routes import auth_routes, dashboard_routes, users_routes, products_routes, orders_routes, invoices_routes, settings_routes, shop_routes, help_routes
+from routes import auth_routes, dashboard_routes, users_routes, products_routes, orders_routes, invoices_routes, settings_routes, shop_routes, help_routes, notifications_routes
 
 
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "trustdelivery-dev-secret-change-me")
-    app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
+    # Les photos prises depuis l'application Android dépassent souvent 1 Mo.
+    app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 
     db_module.init_db()
 
@@ -40,6 +41,7 @@ def create_app():
     app.register_blueprint(shop_routes.bp)
     app.register_blueprint(shop_routes.api_bp)
     app.register_blueprint(help_routes.bp)
+    app.register_blueprint(notifications_routes.bp)
 
     @app.context_processor
     def inject_globals():

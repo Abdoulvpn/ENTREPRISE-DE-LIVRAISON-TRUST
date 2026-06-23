@@ -2,38 +2,53 @@
 {% block title %}Mon profil — TrustDelivery{% endblock %}
 {% block page_title %}Mon profil{% endblock %}
 {% block content %}
+<div class="row g-4 align-items-start">
+  <div class="col-xl-7">
+    <div class="td-card">
+      <div class="d-flex align-items-center justify-content-between mb-4"><div><h5 class="mb-1">Informations personnelles</h5><p class="td-muted mb-0">Gérez votre identité et la sécurité du compte.</p></div><span class="td-badge td-role-{{ current_user.role }}">{{ role_label(current_user.role) }}</span></div>
+      <form method="post">
+        <div class="row">
+          <div class="col-md-6 mb-3"><label class="form-label">Nom complet</label><input type="text" name="full_name" class="form-control" value="{{ current_user.full_name }}" required></div>
+          <div class="col-md-6 mb-3"><label class="form-label">Email</label><input type="email" class="form-control" value="{{ current_user.email }}" disabled></div>
+        </div>
+        <div class="mb-3"><label class="form-label">Téléphone</label><input type="text" name="phone" class="form-control" value="{{ current_user.phone or '' }}"></div>
+        <hr class="td-divider"><p class="td-muted" style="font-size:13px">Laissez ces champs vides pour conserver votre mot de passe.</p>
+        <div class="row"><div class="col-md-6 mb-3"><label class="form-label">Mot de passe actuel</label><input type="password" name="current_password" class="form-control" autocomplete="current-password"></div><div class="col-md-6 mb-3"><label class="form-label">Nouveau mot de passe</label><input type="password" name="new_password" class="form-control" autocomplete="new-password"></div></div>
+        <button type="submit" class="btn td-btn-primary">Enregistrer le profil</button>
+      </form>
+    </div>
+  </div>
 
-<div class="td-card" style="max-width:480px;">
-  <p class="td-muted mb-3">Rôle : <span class="td-badge td-role-{{ current_user.role }}">{{ role_label(current_user.role) }}</span></p>
-  <form method="post">
-    <div class="mb-3">
-      <label class="form-label">Nom complet</label>
-      <input type="text" name="full_name" class="form-control" value="{{ current_user.full_name }}" required>
+  <div class="col-xl-5">
+    <div class="td-card td-whatsapp-card">
+      <div class="td-whatsapp-heading"><span><i class="bi bi-whatsapp"></i></span><div><h5>Lier mon WhatsApp</h5><p>Recevez les alertes importantes directement sur WhatsApp.</p></div></div>
+
+      {% if whatsapp_verification and whatsapp_verification.is_verified %}
+      <div class="td-whatsapp-success"><i class="bi bi-check-circle-fill"></i><div><strong>WhatsApp lié avec succès</strong><span>+{{ whatsapp_verification.phone_number }}</span><small>Vérifié le {{ whatsapp_verification.verified_at|dt }}</small></div></div>
+      <form method="post" action="{{ url_for('settings.send_whatsapp_verification') }}" class="mt-3">
+        <label class="form-label">Changer de numéro</label><div class="input-group"><span class="input-group-text">+</span><input type="tel" name="whatsapp_phone" class="form-control" placeholder="224620000000" inputmode="numeric" required><button class="btn td-btn-outline">Vérifier</button></div>
+      </form>
+      {% elif whatsapp_verification %}
+      <div class="td-otp-sent"><i class="bi bi-chat-dots-fill"></i><div><strong>Code envoyé sur WhatsApp</strong><span>+{{ whatsapp_verification.phone_number }}</span><small>Valable pendant 5 minutes. Ne partagez jamais ce code.</small></div></div>
+      <form method="post" action="{{ url_for('settings.verify_whatsapp') }}" class="mt-3">
+        <label class="form-label">Code de vérification à 6 chiffres</label>
+        <input type="text" name="otp" class="form-control td-otp-input" maxlength="6" minlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code" placeholder="••••••" required autofocus>
+        <button class="btn td-whatsapp-button w-100 mt-3"><i class="bi bi-shield-check"></i> Confirmer mon numéro</button>
+      </form>
+      <form method="post" action="{{ url_for('settings.send_whatsapp_verification') }}" class="mt-2 text-center">
+        <input type="hidden" name="whatsapp_phone" value="{{ whatsapp_verification.phone_number }}">
+        <button class="btn btn-link td-resend-button" type="submit"><i class="bi bi-arrow-clockwise"></i> Renvoyer le code</button>
+      </form>
+      {% else %}
+      <p class="td-muted">Entrez votre numéro complet avec l’indicatif pays. Nous vous enverrons automatiquement un code sécurisé.</p>
+      <form method="post" action="{{ url_for('settings.send_whatsapp_verification') }}">
+        <label class="form-label">Numéro WhatsApp</label><div class="input-group"><span class="input-group-text">+</span><input type="tel" name="whatsapp_phone" class="form-control" placeholder="224620000000" inputmode="numeric" autocomplete="tel" required></div>
+        <div class="form-text">Exemple Guinée : 224 suivi de votre numéro, sans espaces.</div>
+        <button class="btn td-whatsapp-button w-100 mt-3"><i class="bi bi-whatsapp"></i> Envoyer le code</button>
+      </form>
+      {% endif %}
+      <div class="td-otp-security"><i class="bi bi-lock-fill"></i><span>Le code est haché, expire après 5 minutes et n’est jamais affiché dans TrustDelivery.</span></div>
     </div>
-    <div class="mb-3">
-      <label class="form-label">Email</label>
-      <input type="email" class="form-control" value="{{ current_user.email }}" disabled>
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Téléphone</label>
-      <input type="text" name="phone" class="form-control" value="{{ current_user.phone or '' }}">
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Numéro WhatsApp lié</label>
-      <input type="tel" name="whatsapp_phone" class="form-control" value="{{ current_user.whatsapp_phone or '' }}" placeholder="224620000000">
-      <div class="form-text">Indicatif pays + numéro, sans espaces. Utilisé pour les notifications de livraison.</div>
-    </div>
-    <hr class="td-divider">
-    <p class="td-muted" style="font-size:13px;">Laisser les champs ci-dessous vides pour ne pas changer le mot de passe.</p>
-    <div class="mb-3">
-      <label class="form-label">Mot de passe actuel</label>
-      <input type="password" name="current_password" class="form-control">
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Nouveau mot de passe</label>
-      <input type="password" name="new_password" class="form-control">
-    </div>
-    <button type="submit" class="btn td-btn-primary">Enregistrer</button>
-  </form>
+  </div>
 </div>
 {% endblock %}

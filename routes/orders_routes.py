@@ -2,7 +2,7 @@ import csv
 import io
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify
 from datetime import datetime
-from db import get_db, log_action
+from db import get_db, log_action, create_user_notification
 from auth import roles_required, login_required
 from integrations import send_courier_notification, send_order_notification, sync_shop_status, whatsapp_link
 
@@ -574,6 +574,10 @@ def assign_livreur(order_id):
     log_action(g.user, "Affectation livreur", f"{order['order_number']} -> {livreur['full_name']}")
     conn.close()
     flash(f"Livraison proposée à {livreur['full_name']}. Elle doit maintenant être acceptée.", "success")
+    create_user_notification(
+        livreur["id"], "Nouvelle livraison", f"La livraison {order['order_number']} vous est proposée.",
+        url_for("orders.order_detail", order_id=order_id),
+    )
     notification_sent, notification_message, _direct_link = send_courier_notification(order_id, livreur["id"])
     if notification_sent is False:
         flash(notification_message, "warning")
@@ -669,6 +673,14 @@ def update_delivery_status(order_id):
 
     if pending_log:
         log_action(g.user, *pending_log)
+    status_messages = {
+        "en_livraison": ("Livraison en cours", f"Votre commande {order['order_number']} est en cours de livraison."),
+        "livree": ("Commande livrée", f"Votre commande {order['order_number']} a été livrée."),
+        "retournee": ("Commande retournée", f"Votre commande {order['order_number']} a été signalée comme retournée."),
+    }
+    if new_status in status_messages:
+        title, message = status_messages[new_status]
+        create_user_notification(order["client_id"], title, message, url_for("orders.order_detail", order_id=order_id))
     flash(*flash_msg)
     if new_status == "livree":
         notification_sent, notification_message = send_order_notification(order_id, "delivered")

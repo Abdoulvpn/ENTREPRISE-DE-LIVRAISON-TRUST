@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Notifications — TrustDelivery{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+{% block content %}
+<div class="td-section-title">
+  <span>Vos notifications</span>
+  {% if notifications|selectattr('is_read','equalto',0)|list|length %}
+  <form method="post" action="{{ url_for('notifications.mark_all_read') }}"><button class="btn btn-sm td-btn-outline"><i class="bi bi-check2-all"></i> Tout marquer comme lu</button></form>
+  {% endif %}
+</div>
+<div class="td-notification-list">
+{% for item in notifications %}
+  <article class="td-notification-item {{ 'unread' if not item.is_read }}">
+    <div class="td-notification-symbol"><i class="bi {{ 'bi-whatsapp' if 'WhatsApp' in item.title else 'bi-bell-fill' }}"></i></div>
+    <div class="td-notification-copy"><div><strong>{{ item.title }}</strong>{% if not item.is_read %}<span>Nouveau</span>{% endif %}</div><p>{{ item.message }}</p><small>{{ item.created_at|dt }}</small></div>
+    <form method="post" action="{{ url_for('notifications.open_notification', notification_id=item.id) }}"><button class="btn btn-sm td-btn-outline">{{ 'Ouvrir' if item.link else 'Marquer comme lu' }}</button></form>
+  </article>
+{% else %}
+  <div class="td-card td-empty"><i class="bi bi-bell-slash" style="font-size:34px"></i><p class="mt-2 mb-0">Vous n’avez aucune notification.</p></div>
+{% endfor %}
+</div>
+{% endblock %}

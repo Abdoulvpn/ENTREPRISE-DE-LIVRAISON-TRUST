@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">TrustDelivery</string>
+    <string name="configure_server">Connecter TrustDelivery</string>
+    <string name="server_hint">https://votre-site.com</string>
+</resources>

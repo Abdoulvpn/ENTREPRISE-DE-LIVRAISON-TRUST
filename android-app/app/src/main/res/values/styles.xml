@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.TrustDelivery" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/td_orange</item>
+        <item name="android:navigationBarColor">@color/td_blue_dark</item>
+        <item name="android:statusBarColor">@color/td_blue_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>
