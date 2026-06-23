@@ -32,6 +32,16 @@
         <i class="bi">▤</i> Mes commandes
       </a>
       {% endif %}
+      {% if current_user.role in ['super_admin','moderateur','client'] %}
+      <a href="{{ url_for('products.list_shipments') }}" class="{{ 'active' if request.endpoint and 'shipment' in request.endpoint }}">
+        <i class="bi">↗</i> Envois produits
+      </a>
+      {% endif %}
+      {% if current_user.role in ['super_admin','moderateur','agent_confirmation'] %}
+      <a href="{{ url_for('products.courier_stock') }}" class="{{ 'active' if request.endpoint=='products.courier_stock' }}">
+        <i class="bi">▤</i> Stock livreurs
+      </a>
+      {% endif %}
       {% if current_user.role == 'livreur' %}
       <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}">
         <i class="bi">▤</i> Mes livraisons

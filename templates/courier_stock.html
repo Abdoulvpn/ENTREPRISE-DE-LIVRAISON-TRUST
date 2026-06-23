@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Stock livreurs — TrustDelivery{% endblock %}
+{% block page_title %}Stock Livreurs{% endblock %}
+{% block content %}
+<div class="td-section-title"><span>Produits pris en charge par les livreurs</span></div>
+<div class="td-table-wrap"><table class="td-table"><thead><tr><th>Livreur</th><th>Produit</th><th>Réf.</th><th>Quantité prise</th><th>Date</th><th>Statut</th></tr></thead><tbody>
+{% for row in rows %}<tr><td>{{ row.courier_name }}</td><td>{{ row.product_name }}</td><td>{{ row.sku }}</td><td>{{ row.quantity_taken }}</td><td>{{ row.taken_at|dt }}</td><td><span class="td-badge td-status">{{ row.status|replace('_',' ') }}</span></td></tr>{% else %}<tr><td colspan="6" class="td-empty">Aucun produit pris en charge.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

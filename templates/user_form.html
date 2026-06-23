@@ -32,6 +32,15 @@
       <input type="text" name="zone" class="form-control" value="{{ user.zone if user else '' }}">
     </div>
     <div class="mb-3">
+      <label class="form-label">Numéro WhatsApp lié</label>
+      <input type="tel" name="whatsapp_phone" class="form-control" value="{{ user.whatsapp_phone if user else '' }}" placeholder="224620000000">
+    </div>
+    <div class="row">
+      <div class="col-md-4 mb-3"><label class="form-label">Manager</label><select name="manager_id" class="form-select"><option value="">Aucun</option>{% for m in managers %}<option value="{{ m.id }}" {{ 'selected' if user and user.manager_id==m.id }}>{{ m.full_name }}</option>{% endfor %}</select></div>
+      <div class="col-md-4 mb-3"><label class="form-label">Type de client</label><select name="client_type" class="form-select"><option value="seller" {{ 'selected' if not user or user.client_type=='seller' }}>Seller</option><option value="affiliate" {{ 'selected' if user and user.client_type=='affiliate' }}>Affilié</option></select></div>
+      <div class="col-md-4 mb-3"><label class="form-label">Livreur parent</label><select name="parent_courier_id" class="form-select"><option value="">Aucun</option>{% for c in couriers %}<option value="{{ c.id }}" {{ 'selected' if user and user.parent_courier_id==c.id }}>{{ c.full_name }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="mb-3">
       <label class="form-label">{{ 'Nouveau mot de passe (laisser vide pour ne pas changer)' if user else 'Mot de passe' }}</label>
       <input type="password" name="password" class="form-control" {{ 'required' if not user }} placeholder="••••••••">
     </div>

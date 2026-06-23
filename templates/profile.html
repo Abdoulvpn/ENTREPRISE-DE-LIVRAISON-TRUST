@@ -18,6 +18,11 @@
       <label class="form-label">Téléphone</label>
       <input type="text" name="phone" class="form-control" value="{{ current_user.phone or '' }}">
     </div>
+    <div class="mb-3">
+      <label class="form-label">Numéro WhatsApp lié</label>
+      <input type="tel" name="whatsapp_phone" class="form-control" value="{{ current_user.whatsapp_phone or '' }}" placeholder="224620000000">
+      <div class="form-text">Indicatif pays + numéro, sans espaces. Utilisé pour les notifications de livraison.</div>
+    </div>
     <hr class="td-divider">
     <p class="td-muted" style="font-size:13px;">Laisser les champs ci-dessous vides pour ne pas changer le mot de passe.</p>
     <div class="mb-3">

@@ -18,9 +18,9 @@
       <tr>
         <td>{{ o.order_number }}</td>
         <td>{{ o.client_name }}</td>
-        <td><span class="td-badge" style="background:{{ '#6366f1' if o.status=='affectee' else '#0ea5e9' }}">{{ o.status }}</span></td>
+        <td><span class="td-badge" style="background:{{ '#8b5cf6' if o.status=='proposee' else ('#6366f1' if o.status=='affectee' else '#0ea5e9') }}">{{ o.status }}</span></td>
         <td>{{ o.delivery_address }}</td>
-        <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="td-btn-outline btn btn-sm">Gérer</a></td>
+        <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="{{ 'td-btn-primary' if o.status=='proposee' else 'td-btn-outline' }} btn btn-sm">{{ 'Accepter' if o.status=='proposee' else 'Gérer' }}</a></td>
       </tr>
     {% else %}
       <tr><td colspan="5" class="td-empty">Aucune livraison assignée pour le moment.</td></tr>

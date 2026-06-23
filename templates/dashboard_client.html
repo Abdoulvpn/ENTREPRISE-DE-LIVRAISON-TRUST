@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Tableau de bord — TrustDelivery{% endblock %}
-{% block page_title %}Bonjour, {{ current_user.full_name.split(' ')[0] }}{% endblock %}
+{% block title %}Tableau de bord partenaire — TrustDelivery{% endblock %}
+{% block page_title %}Tableau de bord partenaire{% endblock %}
 {% block content %}
 
 <div class="td-kpi-grid">
@@ -8,6 +8,29 @@
   <div class="td-kpi orange"><div class="td-kpi-label">En cours</div><div class="td-kpi-value">{{ stats.en_cours }}</div></div>
   <div class="td-kpi green"><div class="td-kpi-label">Livrées</div><div class="td-kpi-value">{{ stats.livrees }}</div></div>
   <div class="td-kpi red"><div class="td-kpi-label">Factures impayées</div><div class="td-kpi-value">{{ stats.factures_impayees }}</div></div>
+</div>
+
+<div class="td-kpi-grid mt-3">
+  <div class="td-kpi"><div class="td-kpi-label">Boutiques connectées</div><div class="td-kpi-value">{{ stats.boutiques_connectees }}</div></div>
+  <div class="td-kpi orange"><div class="td-kpi-label">Imports automatiques</div><div class="td-kpi-value">{{ stats.imports_automatiques }}</div></div>
+  <div class="td-kpi green"><div class="td-kpi-label">Livraisons suivies par GPS</div><div class="td-kpi-value">{{ stats.livraisons_gps }}</div></div>
+</div>
+
+<div class="td-section-title">
+  <span>API de connexion</span>
+  <a href="{{ url_for('shops.list_connections') }}" class="btn td-btn-outline btn-sm">Gérer mes boutiques</a>
+</div>
+<div class="td-card mb-4">
+  <p class="mb-2">Endpoint d'import : <code>{{ url_for('partner_api.api_create_order', _external=True) }}</code></p>
+  <p class="td-muted mb-3" style="font-size:13px;">Envoyez la clé de la boutique dans l'en-tête <code>Authorization: Bearer VOTRE_CLE</code>. Le suivi est disponible sur <code>/api/v1/commandes/{reference_externe}</code>.</p>
+  {% for shop in connections %}
+  <div class="d-flex justify-content-between align-items-center border-top py-2 gap-3 flex-wrap">
+    <span><strong>{{ shop.shop_name }}</strong> · {{ shop.platform }} · dispatch {{ 'automatique' if shop.auto_dispatch else 'manuel' }}</span>
+    <code>{{ shop.webhook_token[:8] }}••••••••</code>
+  </div>
+  {% else %}
+  <p class="td-muted mb-0">Connectez une boutique pour obtenir sa clé API.</p>
+  {% endfor %}
 </div>
 
 <div class="td-section-title">
@@ -22,7 +45,7 @@
       <tr>
         <td>{{ o.order_number }}</td>
         <td>{{ o.created_at | dt }}</td>
-        <td><span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[o.status] }}">{{ o.status }}</span></td>
+        <td><span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','proposee':'#8b5cf6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[o.status] }}">{{ o.status }}</span></td>
         <td>{{ (o.total_amount + o.delivery_fee) | money }}</td>
         <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>
       </tr>

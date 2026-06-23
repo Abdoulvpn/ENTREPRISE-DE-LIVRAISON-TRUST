@@ -111,9 +111,32 @@ Make, Zapier ou n8n. TrustDelivery lui envoie :
 }
 ```
 
-Le callback reçoit aussi `Authorization: Bearer ...` et
-`X-TrustDelivery-Event: order.delivered` pour authentifier et router l'événement.
+Le callback reçoit aussi `Authorization: Bearer ...` et `X-TrustDelivery-Event` pour
+authentifier et router chaque évolution : `confirmed`, `assigned`,
+`out_for_delivery`, `delivered`, `cancelled` ou `returned`.
 
 Le webhook de notification reçoit un JSON contenant `channel`, `to`, `message` et
 `order_id`. Une panne externe n'annule jamais une affectation ou une livraison : elle
 est enregistrée dans les journaux pour pouvoir être corrigée.
+
+## API partenaire, dispatch et GPS
+
+Chaque boutique possède une clé dans **Mes boutiques**. L'import API utilise :
+
+```http
+POST /api/v1/commandes
+Authorization: Bearer CLE_DE_LA_BOUTIQUE
+Content-Type: application/json
+```
+
+Le corps reprend le format universel : `external_order_id`, coordonnées du
+destinataire et `items` avec `sku` et `quantity`. Le statut et la dernière position GPS
+sont disponibles avec `GET /api/v1/commandes/{external_order_id}` et la même clé.
+
+Lorsque le dispatch automatique est activé, TrustDelivery vérifie et décrémente le
+stock, privilégie un livreur de la même zone, puis choisit celui ayant le moins de
+livraisons actives. Sans stock ou sans livreur actif, la commande reste en attente.
+
+Le suivi GPS repose sur l'autorisation de géolocalisation du téléphone du livreur. Le
+site doit donc être servi en HTTPS ; la position n'est acceptée que pour une commande
+assignée et encore active, et reste invisible aux autres partenaires.

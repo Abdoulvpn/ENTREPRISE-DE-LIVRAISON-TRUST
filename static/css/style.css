@@ -235,6 +235,9 @@ a { text-decoration: none; color: var(--td-blue); }
 .td-kpi.red::before { background: #dc2626; }
 .td-kpi-label { font-size: 12.5px; color: var(--td-text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .td-kpi-value { font-family: 'Poppins', sans-serif; font-size: 28px; font-weight: 800; color: var(--td-blue-dark); margin-top: 6px; }
+.td-kpi-value small { font-size: 13px; color: var(--td-text-muted); }
+.td-product-thumb { width: 48px; height: 48px; border-radius: 9px; object-fit: cover; border: 1px solid var(--td-border); }
+.td-status { background: #64748b; text-transform: capitalize; }
 
 .td-section-title {
   font-size: 16px;

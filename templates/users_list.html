@@ -19,7 +19,7 @@
 
 <div class="td-table-wrap">
   <table class="td-table">
-    <thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Téléphone</th><th>Statut</th><th></th></tr></thead>
+    <thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Téléphone</th><th>WhatsApp</th><th>Statut</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>
@@ -27,6 +27,7 @@
         <td>{{ u.email }}</td>
         <td><span class="td-badge td-role-{{ u.role }}">{{ role_label(u.role) }}</span></td>
         <td>{{ u.phone or '—' }}</td>
+        <td>{{ u.whatsapp_phone or 'Non lié' }}</td>
         <td>
           {% if u.is_active %}
             <span class="td-badge" style="background:#16a34a;">Actif</span>
@@ -44,7 +45,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="td-empty">Aucun utilisateur trouvé.</td></tr>
+      <tr><td colspan="7" class="td-empty">Aucun utilisateur trouvé.</td></tr>
     {% endfor %}
     </tbody>
   </table>

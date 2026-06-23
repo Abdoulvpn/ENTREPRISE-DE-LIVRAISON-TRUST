@@ -35,6 +35,7 @@ class ClientIsolationTests(unittest.TestCase):
         cls.courier_id = conn.execute(
             "SELECT id FROM users WHERE role='livreur' ORDER BY id LIMIT 1"
         ).fetchone()["id"]
+        conn.execute("UPDATE users SET whatsapp_phone='224620000099' WHERE id=?", (cls.courier_id,))
         cls.zone_id = conn.execute("SELECT id FROM zones ORDER BY id LIMIT 1").fetchone()["id"]
         cls.warehouse_id = conn.execute("SELECT id FROM warehouses ORDER BY id LIMIT 1").fetchone()["id"]
 
@@ -252,13 +253,17 @@ class ClientIsolationTests(unittest.TestCase):
 
     def test_dispatch_sends_notification_automatically(self):
         client = self.logged_client(self.admin_id)
-        with patch("routes.orders_routes.send_order_notification", return_value=(True, "envoyée")) as notify:
+        with patch("routes.orders_routes.send_courier_notification", return_value=(True, "envoyée", "https://wa.me/test")) as notify:
             response = client.post(
                 f"/commandes/{self.notify_order_id}/affecter?_tab=test-tab",
                 data={"livreur_id": self.courier_id},
             )
         self.assertEqual(response.status_code, 302)
-        notify.assert_called_once_with(self.notify_order_id, "assigned", unittest.mock.ANY)
+        notify.assert_called_once_with(self.notify_order_id, self.courier_id)
+        conn = get_db()
+        order = conn.execute("SELECT status FROM orders WHERE id=?", (self.notify_order_id,)).fetchone()
+        conn.close()
+        self.assertEqual(order["status"], "proposee")
 
     def test_notification_webhook_receives_recipient_and_message(self):
         response = MagicMock()
@@ -360,6 +365,89 @@ class ClientIsolationTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 302)
         sync.assert_called_once_with(self.woo_order_id, "livree")
+
+    def test_partner_api_imports_and_auto_dispatches_order(self):
+        response = app.test_client().post(
+            "/api/v1/commandes",
+            headers={"Authorization": f"Bearer {self.webhook_token}"},
+            json={
+                "external_order_id": "API-AUTO-1",
+                "recipient_name": "Client API",
+                "recipient_phone": "224620000006",
+                "shipping_address": {"address1": "Kaloum", "city": "Conakry"},
+                "items": [{"sku": "TEST-ALPHA", "quantity": 1}],
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertTrue(data["auto_dispatch"]["assigned"])
+        conn = get_db()
+        order = conn.execute("SELECT status, livreur_id FROM orders WHERE id=?", (data["order_id"],)).fetchone()
+        conn.close()
+        self.assertEqual(order["status"], "proposee")
+        self.assertIsNotNone(order["livreur_id"])
+
+        courier = self.logged_client(order["livreur_id"])
+        with patch("routes.orders_routes.send_order_notification", return_value=(True, "envoyée")), patch(
+            "routes.orders_routes.sync_shop_status", return_value=(True, "synchronisée")
+        ):
+            accepted = courier.post(
+                f"/commandes/{data['order_id']}/repondre-proposition?_tab=test-tab",
+                data={"action": "accept"},
+            )
+        self.assertEqual(accepted.status_code, 302)
+        conn = get_db()
+        accepted_status = conn.execute("SELECT status FROM orders WHERE id=?", (data["order_id"],)).fetchone()["status"]
+        conn.close()
+        self.assertEqual(accepted_status, "affectee")
+
+        invalid = app.test_client().post(
+            "/api/v1/commandes",
+            headers={"Authorization": "Bearer invalid-token"},
+            json={"external_order_id": "NOPE"},
+        )
+        self.assertEqual(invalid.status_code, 401)
+
+    def test_partner_api_and_gps_are_scoped_to_the_connection(self):
+        conn = get_db()
+        order_id = conn.execute(
+            "INSERT INTO orders (order_number, client_id, status, zone_id, livreur_id, shop_connection_id, external_order_id) "
+            "VALUES (?,?,?,?,?,?,?)",
+            ("CMD-GPS-API", self.first_client_id, "en_livraison", self.zone_id, self.courier_id, self.connection_id, "GPS-API-1"),
+        ).lastrowid
+        conn.commit()
+        conn.close()
+
+        courier = self.logged_client(self.courier_id)
+        gps_response = courier.post(
+            f"/commandes/{order_id}/position?_tab=test-tab",
+            json={"latitude": 9.6412, "longitude": -13.5784, "accuracy": 8.5},
+        )
+        self.assertEqual(gps_response.status_code, 200)
+
+        api_response = app.test_client().get(
+            "/api/v1/commandes/GPS-API-1",
+            headers={"Authorization": f"Bearer {self.webhook_token}"},
+        )
+        self.assertEqual(api_response.status_code, 200)
+        self.assertEqual(api_response.get_json()["gps"]["latitude"], 9.6412)
+
+        wrong_connection = app.test_client().get(
+            "/api/v1/commandes/GPS-API-1",
+            headers={"Authorization": "Bearer woo-test-token"},
+        )
+        self.assertEqual(wrong_connection.status_code, 404)
+
+        other_client = self.logged_client(self.second_client_id)
+        forbidden = other_client.get(f"/commandes/{order_id}/temps-reel?_tab=test-tab")
+        self.assertEqual(forbidden.status_code, 403)
+
+    def test_partner_dashboard_exposes_connection_api(self):
+        client = self.logged_client(self.first_client_id)
+        response = client.get("/dashboard?_tab=test-tab")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Tableau de bord partenaire", response.data)
+        self.assertIn(b"/api/v1/commandes", response.data)
 
 
 if __name__ == "__main__":

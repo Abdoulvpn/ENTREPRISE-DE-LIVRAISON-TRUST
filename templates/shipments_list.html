@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Envois produits — TrustDelivery{% endblock %}
+{% block page_title %}Envoi produit{% endblock %}
+{% block content %}
+<div class="td-section-title"><span>{{ shipments|length }} envoi(s)</span><a href="{{ url_for('products.create_shipment') }}" class="btn td-btn-accent btn-sm">+ Nouvel envoi</a></div>
+<div class="td-table-wrap"><table class="td-table"><thead><tr><th>Photo</th><th>Client</th><th>Produit</th><th>Réf.</th><th>Quantité</th><th>Date</th><th>Validation</th><th>Action</th></tr></thead><tbody>
+{% for sh in shipments %}<tr>
+  <td>{% if sh.photo %}<img src="{{ url_for('static', filename=sh.photo) }}" alt="" class="td-product-thumb">{% else %}—{% endif %}</td>
+  <td>{{ sh.client_name }}</td><td>{{ sh.product_title }}{% if sh.link %}<br><a href="{{ sh.link }}" target="_blank" rel="noopener" class="td-muted">Voir le lien</a>{% endif %}</td><td>{{ sh.ref }}</td><td>{{ sh.quantity }}</td><td>{{ sh.shipment_date|dt('%d/%m/%Y') }}</td>
+  <td>{% if sh.validated %}<span class="td-badge bg-success">🔔 Validé</span>{% else %}<span class="td-badge bg-warning text-dark">En attente</span>{% endif %}</td>
+  <td><a href="{{ url_for('products.edit_shipment', shipment_id=sh.id) }}" class="btn btn-sm td-btn-outline" title="Modifier">✎</a>{% if current_user.role in ['super_admin','moderateur'] and not sh.validated %}<form method="post" action="{{ url_for('products.validate_shipment', shipment_id=sh.id) }}" class="d-inline"><button class="btn btn-sm td-btn-primary">Valider</button></form>{% endif %}</td>
+</tr>{% else %}<tr><td colspan="8" class="td-empty">Aucun envoi produit.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

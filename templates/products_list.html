@@ -5,7 +5,7 @@
 
 <div class="td-section-title">
   <span>{{ products | length }} produit(s)</span>
-  {% if current_user.role in ['super_admin','moderateur'] %}
+  {% if current_user.role in ['super_admin','moderateur','client'] %}
   <a href="{{ url_for('products.create_product') }}" class="btn td-btn-accent btn-sm">+ Nouveau produit</a>
   {% endif %}
 </div>
@@ -27,15 +27,14 @@
 
 <div class="td-table-wrap">
   <table class="td-table">
-    <thead><tr><th>Produit</th><th>Référence</th>{% if current_user.role != 'client' %}<th>Client</th>{% endif %}<th>Catégorie</th><th>Prix</th><th>Stock total</th><th></th></tr></thead>
+    <thead><tr><th>Produit</th><th>Référence</th>{% if current_user.role != 'client' %}<th>Fournisseur</th>{% endif %}<th>Initiale</th><th>Endommagée</th><th>Livrée</th><th>Restante</th><th>Validé</th><th>Seller</th><th>Actions</th></tr></thead>
     <tbody>
     {% for p in products %}
       <tr>
-        <td>{{ p.name }}</td>
+        <td><div class="d-flex align-items-center gap-2">{% if p.photo %}<img src="{{ url_for('static',filename=p.photo) }}" class="td-product-thumb" alt="">{% endif %}<div><strong>{{ p.name }}</strong>{% if p.description %}<br><span class="td-muted">{{ p.description|truncate(55) }}</span>{% endif %}{% if p.stock_note %}<br><small>Note : {{ p.stock_note|truncate(45) }}</small>{% endif %}{% if p.link %}<br><a href="{{ p.link }}" target="_blank" rel="noopener">Lien produit</a>{% endif %}</div></div></td>
         <td>{{ p.sku }}</td>
         {% if current_user.role != 'client' %}<td>{{ p.supplier_client_name or 'Non attribué' }}</td>{% endif %}
-        <td>{{ p.category or '—' }}</td>
-        <td>{{ p.price | money }}</td>
+        <td>{{ p.qte_initiale }}</td><td>{{ p.qte_endommagee }}</td><td>{{ p.qte_livree }}</td>
         <td>
           {% if p.alert_threshold is not none and p.total_stock <= p.alert_threshold %}
             <strong style="color:#dc2626;">{{ p.total_stock }}</strong> <span class="td-badge" style="background:#dc2626;">Rupture proche</span>
@@ -43,17 +42,19 @@
             {{ p.total_stock }}
           {% endif %}
         </td>
+        <td><span title="Produit validé">{{ '🔔' if p.is_validated else '🔕' }}</span></td><td><span title="{{ 'Visible aux confirmateurs' if p.visible_seller else 'Masqué aux confirmateurs' }}">{{ '🔔' if p.visible_seller else '🔕' }}</span></td>
         <td>
-          {% if current_user.role in ['super_admin','moderateur'] %}
-            <a href="{{ url_for('products.edit_product', product_id=p.id) }}" class="td-btn-outline btn btn-sm">Modifier</a>
-            <a href="{{ url_for('products.stock_movements', product_id=p.id) }}" class="td-btn-outline btn btn-sm">Stock</a>
+          {% if current_user.role in ['super_admin','moderateur','client'] %}
+            <a href="{{ url_for('products.edit_product', product_id=p.id) }}" class="td-btn-outline btn btn-sm" title="Modifier">✎</a>
+            {% if current_user.role in ['super_admin','moderateur'] %}<a href="{{ url_for('products.stock_movements', product_id=p.id) }}" class="td-btn-outline btn btn-sm">Détail &amp; historique</a>
+            <form method="post" action="{{ url_for('products.delete_product', product_id=p.id) }}" class="d-inline" onsubmit="return confirm('Supprimer ce produit ?')"><button class="btn btn-sm btn-outline-danger">Supprimer</button></form>{% endif %}
           {% else %}
             <span class="td-muted">Lecture seule</span>
           {% endif %}
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="{{ 6 if current_user.role == 'client' else 7 }}" class="td-empty">Aucun produit trouvé.</td></tr>
+      <tr><td colspan="10" class="td-empty">Aucun produit trouvé.</td></tr>
     {% endfor %}
     </tbody>
   </table>

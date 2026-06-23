@@ -1,10 +1,10 @@
 import csv
 import io
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify
 from datetime import datetime
 from db import get_db, log_action
 from auth import roles_required, login_required
-from integrations import send_order_notification, sync_shop_status
+from integrations import send_courier_notification, send_order_notification, sync_shop_status, whatsapp_link
 
 bp = Blueprint("orders", __name__, url_prefix="/commandes")
 
@@ -41,7 +41,7 @@ def restock_items(conn, order_id, note):
             )
 
 
-def deduct_stock_for_items(conn, items):
+def deduct_stock_for_items(conn, items, created_by=None):
     """Vérifie la disponibilité puis décrémente le stock (toutes entrepôts confondus). Retourne un message d'erreur ou None."""
     for product_id, quantity in items:
         total_available = conn.execute(
@@ -63,7 +63,14 @@ def deduct_stock_for_items(conn, items):
             conn.execute("UPDATE stock SET quantity = quantity - ? WHERE id=?", (take, row["id"]))
             conn.execute(
                 "INSERT INTO stock_movements (product_id, warehouse_id, movement_type, quantity, note, created_by) VALUES (?,?,?,?,?,?)",
-                (product_id, row["warehouse_id"], "sortie", take, "Confirmation de commande", g.user["id"]),
+                (
+                    product_id,
+                    row["warehouse_id"],
+                    "sortie",
+                    take,
+                    "Confirmation de commande",
+                    created_by if created_by is not None else (g.user["id"] if g.get("user") else None),
+                ),
             )
             remaining -= take
     return None
@@ -390,7 +397,7 @@ def order_detail(order_id):
     conn = get_db()
     order = conn.execute(
         "SELECT o.*, u.full_name as client_name, u.email as client_email, u.phone as client_phone, "
-        "l.full_name as livreur_name, c.full_name as confirmed_by_name, z.name as zone_name "
+        "l.full_name as livreur_name, l.whatsapp_phone as livreur_whatsapp, c.full_name as confirmed_by_name, z.name as zone_name "
         "FROM orders o JOIN users u ON u.id=o.client_id "
         "LEFT JOIN users l ON l.id=o.livreur_id LEFT JOIN users c ON c.id=o.confirmed_by "
         "LEFT JOIN zones z ON z.id=o.zone_id WHERE o.id=?",
@@ -422,10 +429,91 @@ def order_detail(order_id):
         ).fetchall()
     invoice = conn.execute("SELECT * FROM invoices WHERE order_id=?", (order_id,)).fetchone()
     statuses = conn.execute("SELECT * FROM order_status_config ORDER BY sort_order").fetchall()
+    last_location = conn.execute(
+        "SELECT latitude, longitude, accuracy, recorded_at FROM courier_locations "
+        "WHERE order_id=? ORDER BY recorded_at DESC, id DESC LIMIT 1",
+        (order_id,),
+    ).fetchone()
+    courier_whatsapp_url = ""
+    if order["livreur_whatsapp"]:
+        courier_message = (
+            f"Bonjour {order['livreur_name']}, une livraison {order['order_number']} vous est proposée. "
+            f"Destinataire : {order['recipient_name'] or 'à confirmer'}. Adresse : {order['delivery_address'] or 'à confirmer'}. "
+            "Ouvrez TrustDelivery pour accepter ou refuser."
+        )
+        courier_whatsapp_url = whatsapp_link(order["livreur_whatsapp"], courier_message)
     conn.close()
     return render_template(
-        "order_detail.html", order=order, items=items, livreurs=livreurs, invoice=invoice, statuses=statuses
+        "order_detail.html", order=order, items=items, livreurs=livreurs, invoice=invoice,
+        statuses=statuses, last_location=last_location, courier_whatsapp_url=courier_whatsapp_url
     )
+
+
+def can_access_order(order):
+    if not order:
+        return False
+    if g.user["role"] == "client":
+        return order["client_id"] == g.user["id"]
+    if g.user["role"] == "livreur":
+        return order["livreur_id"] == g.user["id"]
+    return g.user["role"] in ("super_admin", "moderateur", "agent_confirmation")
+
+
+@bp.route("/<int:order_id>/position", methods=["POST"])
+@roles_required("livreur")
+def update_courier_location(order_id):
+    conn = get_db()
+    order = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+    if not order or order["livreur_id"] != g.user["id"] or order["status"] not in ("affectee", "en_livraison"):
+        conn.close()
+        return jsonify({"ok": False, "error": "Livraison non autorisée."}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        latitude = float(data.get("latitude"))
+        longitude = float(data.get("longitude"))
+        accuracy = float(data.get("accuracy")) if data.get("accuracy") is not None else None
+        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+            raise ValueError
+    except (TypeError, ValueError):
+        conn.close()
+        return jsonify({"ok": False, "error": "Coordonnées GPS invalides."}), 422
+    conn.execute(
+        "INSERT INTO courier_locations (livreur_id, order_id, latitude, longitude, accuracy) VALUES (?,?,?,?,?)",
+        (g.user["id"], order_id, latitude, longitude, accuracy),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@bp.route("/<int:order_id>/temps-reel")
+@login_required
+def realtime_order(order_id):
+    conn = get_db()
+    order = conn.execute(
+        "SELECT o.id, o.client_id, o.livreur_id, o.status, o.delivered_at, u.full_name livreur_name "
+        "FROM orders o LEFT JOIN users u ON u.id=o.livreur_id WHERE o.id=?",
+        (order_id,),
+    ).fetchone()
+    if not can_access_order(order):
+        conn.close()
+        return jsonify({"ok": False, "error": "Accès refusé."}), 403
+    status = conn.execute("SELECT label, color FROM order_status_config WHERE status_key=?", (order["status"],)).fetchone()
+    location = conn.execute(
+        "SELECT latitude, longitude, accuracy, recorded_at FROM courier_locations "
+        "WHERE order_id=? ORDER BY recorded_at DESC, id DESC LIMIT 1",
+        (order_id,),
+    ).fetchone()
+    conn.close()
+    return jsonify({
+        "ok": True,
+        "status": order["status"],
+        "status_label": status["label"] if status else order["status"],
+        "status_color": status["color"] if status else "#64748b",
+        "livreur_name": order["livreur_name"],
+        "delivered_at": order["delivered_at"],
+        "gps": dict(location) if location else None,
+    })
 
 
 @bp.route("/<int:order_id>/confirmer", methods=["POST"])
@@ -453,6 +541,7 @@ def confirm_order(order_id):
     log_action(g.user, "Confirmation commande", order["order_number"])
     conn.close()
     flash(f"Commande {order['order_number']} confirmée. Le stock a été mis à jour.", "success")
+    sync_shop_status(order_id, "confirmee")
     return redirect(url_for("orders.order_detail", order_id=order_id))
 
 
@@ -471,17 +560,60 @@ def assign_livreur(order_id):
         return redirect(url_for("orders.order_detail", order_id=order_id))
 
     conn.execute(
-        "UPDATE orders SET status='affectee', livreur_id=?, assigned_at=datetime('now') WHERE id=?",
+        "UPDATE orders SET status='proposee', livreur_id=?, assigned_at=datetime('now') WHERE id=?",
         (livreur_id, order_id),
     )
+    items = conn.execute("SELECT product_id, quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall()
+    for item in items:
+        conn.execute(
+            "INSERT INTO courier_stock (courier_id, product_id, order_id, quantity_taken, status) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(courier_id, product_id, order_id) DO UPDATE SET quantity_taken=excluded.quantity_taken, taken_at=datetime('now'), status='propose'",
+            (livreur_id, item["product_id"], order_id, item["quantity"], "propose"),
+        )
     conn.commit()
     log_action(g.user, "Affectation livreur", f"{order['order_number']} -> {livreur['full_name']}")
     conn.close()
-    flash(f"Commande affectée à {livreur['full_name']}.", "success")
-    notification_sent, notification_message = send_order_notification(order_id, "assigned", livreur["full_name"])
-    if not notification_sent:
+    flash(f"Livraison proposée à {livreur['full_name']}. Elle doit maintenant être acceptée.", "success")
+    notification_sent, notification_message, _direct_link = send_courier_notification(order_id, livreur["id"])
+    if notification_sent is False:
         flash(notification_message, "warning")
     return redirect(url_for("orders.order_detail", order_id=order_id))
+
+
+@bp.route("/<int:order_id>/repondre-proposition", methods=["POST"])
+@roles_required("livreur")
+def respond_to_assignment(order_id):
+    action = request.form.get("action")
+    conn = get_db()
+    order = conn.execute(
+        "SELECT * FROM orders WHERE id=? AND livreur_id=? AND status='proposee'",
+        (order_id, g.user["id"]),
+    ).fetchone()
+    if not order or action not in ("accept", "reject"):
+        conn.close()
+        flash("Cette proposition n’est plus disponible.", "warning")
+        return redirect(url_for("orders.list_orders"))
+    if action == "accept":
+        conn.execute("UPDATE orders SET status='affectee' WHERE id=?", (order_id,))
+        conn.execute("UPDATE courier_stock SET status='pris_en_charge' WHERE order_id=? AND courier_id=?", (order_id, g.user["id"]))
+        message = "Livraison acceptée. Vous pouvez maintenant la démarrer."
+        log_entry = ("Livraison acceptée", order["order_number"])
+    else:
+        conn.execute("UPDATE courier_stock SET status='refuse' WHERE order_id=? AND courier_id=?", (order_id, g.user["id"]))
+        conn.execute(
+            "UPDATE orders SET status='confirmee', livreur_id=NULL, assigned_at=NULL WHERE id=?",
+            (order_id,),
+        )
+        message = "Livraison refusée. Elle retourne au dispatch pour une nouvelle proposition."
+        log_entry = ("Livraison refusée", order["order_number"])
+    conn.commit()
+    conn.close()
+    log_action(g.user, *log_entry)
+    if action == "accept":
+        send_order_notification(order_id, "assigned", g.user["full_name"])
+        sync_shop_status(order_id, "affectee")
+    flash(message, "success" if action == "accept" else "info")
+    return redirect(url_for("orders.order_detail", order_id=order_id) if action == "accept" else url_for("orders.list_orders"))
 
 
 @bp.route("/<int:order_id>/statut-livraison", methods=["POST"])
@@ -508,6 +640,11 @@ def update_delivery_status(order_id):
 
     if new_status == "livree":
         conn.execute("UPDATE orders SET status='livree', delivered_at=datetime('now') WHERE id=?", (order_id,))
+        conn.execute("UPDATE courier_stock SET status='livre' WHERE order_id=?", (order_id,))
+        for item in conn.execute("SELECT product_id, quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall():
+            stock_row = conn.execute("SELECT id FROM stock WHERE product_id=? ORDER BY id LIMIT 1", (item["product_id"],)).fetchone()
+            if stock_row:
+                conn.execute("UPDATE stock SET delivered_quantity=delivered_quantity+? WHERE id=?", (item["quantity"], stock_row["id"]))
         invoice_number = generate_invoice_number(conn)
         amount = order["total_amount"]
         conn.execute(
@@ -518,6 +655,7 @@ def update_delivery_status(order_id):
         flash_msg = (f"Commande marquée comme livrée. Facture {invoice_number} générée automatiquement.", "success")
     elif new_status == "retournee":
         conn.execute("UPDATE orders SET status='retournee' WHERE id=?", (order_id,))
+        conn.execute("UPDATE courier_stock SET status='retourne' WHERE order_id=?", (order_id,))
         restock_items(conn, order_id, f"Retour commande {order['order_number']}")
         pending_log = ("Retour commande", order["order_number"])
         flash_msg = ("Commande marquée comme retournée. Le stock a été réajusté.", "warning")
@@ -539,6 +677,8 @@ def update_delivery_status(order_id):
         sync_result, sync_message = sync_shop_status(order_id, "livree")
         if sync_result is False:
             flash(f"Livraison enregistrée, mais la boutique n’a pas été mise à jour : {sync_message}", "warning")
+    else:
+        sync_shop_status(order_id, new_status)
     return redirect(url_for("orders.order_detail", order_id=order_id))
 
 
@@ -568,7 +708,7 @@ def cancel_order(order_id):
         return redirect(url_for("orders.order_detail", order_id=order_id))
 
     reason = request.form.get("reason", "").strip()
-    if order["status"] in ("confirmee", "affectee", "en_livraison"):
+    if order["status"] in ("confirmee", "proposee", "affectee", "en_livraison"):
         restock_items(conn, order_id, f"Annulation commande {order['order_number']}")
 
     conn.execute("UPDATE orders SET status='annulee', cancel_reason=? WHERE id=?", (reason, order_id))
@@ -576,4 +716,5 @@ def cancel_order(order_id):
     log_action(g.user, "Annulation commande", f"{order['order_number']} — motif : {reason or 'non précisé'}")
     conn.close()
     flash(f"Commande {order['order_number']} annulée.", "info")
+    sync_shop_status(order_id, "annulee")
     return redirect(url_for("orders.order_detail", order_id=order_id))

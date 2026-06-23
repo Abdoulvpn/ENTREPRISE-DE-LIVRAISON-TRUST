@@ -4,11 +4,12 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 
 from auth import roles_required
 from db import get_db, log_action
-from integrations import valid_store_url
-from routes.orders_routes import create_order_record
+from integrations import send_courier_notification, sync_shop_status, valid_store_url
+from routes.orders_routes import create_order_record, deduct_stock_for_items
 
 
 bp = Blueprint("shops", __name__, url_prefix="/boutiques")
+api_bp = Blueprint("partner_api", __name__, url_prefix="/api/v1")
 
 PLATFORMS = {
     "shopify": "Shopify",
@@ -143,6 +144,31 @@ def can_manage(connection):
     return g.user["role"] in ("super_admin", "moderateur") or connection["client_id"] == g.user["id"]
 
 
+def dispatch_order_automatically(conn, order_id, zone_id):
+    zone = conn.execute("SELECT name FROM zones WHERE id=?", (zone_id,)).fetchone()
+    zone_name = zone["name"] if zone else ""
+    courier = conn.execute(
+        "SELECT u.id, u.full_name, COUNT(o.id) active_orders FROM users u "
+        "LEFT JOIN orders o ON o.livreur_id=u.id AND o.status IN ('proposee','affectee','en_livraison') "
+        "WHERE u.role='livreur' AND u.is_active=1 GROUP BY u.id "
+        "ORDER BY CASE WHEN lower(COALESCE(u.zone,''))=lower(?) THEN 0 ELSE 1 END, active_orders ASC, u.id ASC LIMIT 1",
+        (zone_name,),
+    ).fetchone()
+    if not courier:
+        return {"assigned": False, "message": "Aucun livreur actif disponible"}
+
+    items = conn.execute("SELECT product_id, quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall()
+    error = deduct_stock_for_items(conn, [(item["product_id"], item["quantity"]) for item in items], created_by=None)
+    if error:
+        return {"assigned": False, "message": error}
+
+    conn.execute(
+        "UPDATE orders SET status='proposee', confirmed_at=datetime('now'), livreur_id=?, assigned_at=datetime('now') WHERE id=?",
+        (courier["id"], order_id),
+    )
+    return {"assigned": True, "courier_id": courier["id"], "courier_name": courier["full_name"]}
+
+
 @bp.route("/", methods=["GET", "POST"])
 @roles_required("super_admin", "moderateur", "client")
 def list_connections():
@@ -156,6 +182,7 @@ def list_connections():
         api_key = text(request.form.get("api_key"))
         api_secret = text(request.form.get("api_secret"))
         status_callback_url = text(request.form.get("status_callback_url"))
+        auto_dispatch = 1 if request.form.get("auto_dispatch") == "on" else 0
         client = conn.execute("SELECT id FROM users WHERE id=? AND role='client' AND is_active=1", (client_id,)).fetchone()
         zone = conn.execute("SELECT id FROM zones WHERE id=?", (zone_id,)).fetchone()
         if not client or platform not in PLATFORMS or not shop_name or not zone:
@@ -167,8 +194,8 @@ def list_connections():
         else:
             conn.execute(
                 "INSERT INTO shop_connections (client_id, platform, shop_name, webhook_token, default_zone_id, "
-                "store_url, api_key, api_secret, status_callback_url) VALUES (?,?,?,?,?,?,?,?,?)",
-                (client_id, platform, shop_name, secrets.token_urlsafe(32), zone_id, store_url, api_key, api_secret, status_callback_url),
+                "store_url, api_key, api_secret, status_callback_url, auto_dispatch) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (client_id, platform, shop_name, secrets.token_urlsafe(32), zone_id, store_url, api_key, api_secret, status_callback_url, auto_dispatch),
             )
             conn.commit()
             log_action(g.user, "Connexion boutique", f"{shop_name} ({platform})")
@@ -243,6 +270,7 @@ def update_api_credentials(connection_id):
     api_key = text(request.form.get("api_key"))
     api_secret = text(request.form.get("api_secret"))
     status_callback_url = text(request.form.get("status_callback_url"))
+    auto_dispatch = 1 if request.form.get("auto_dispatch") == "on" else 0
     if store_url and not valid_store_url(store_url):
         conn.close()
         flash("L’URL de la boutique doit être une adresse HTTPS publique valide.", "danger")
@@ -253,8 +281,8 @@ def update_api_credentials(connection_id):
         return redirect(url_for("shops.list_connections"))
     conn.execute(
         "UPDATE shop_connections SET store_url=?, api_key=CASE WHEN ?='' THEN api_key ELSE ? END, "
-        "api_secret=CASE WHEN ?='' THEN api_secret ELSE ? END, status_callback_url=? WHERE id=?",
-        (store_url, api_key, api_key, api_secret, api_secret, status_callback_url, connection_id),
+        "api_secret=CASE WHEN ?='' THEN api_secret ELSE ? END, status_callback_url=?, auto_dispatch=? WHERE id=?",
+        (store_url, api_key, api_key, api_secret, api_secret, status_callback_url, auto_dispatch, connection_id),
     )
     conn.commit()
     conn.close()
@@ -345,13 +373,81 @@ def receive_webhook(token):
             "UPDATE orders SET shop_connection_id=?, external_order_id=? WHERE id=?",
             (connection["id"], external_id, order_id),
         )
-        record_event(conn, connection["id"], external_id, "success", f"Commande {order_number} créée", order_id)
+        dispatch = {"assigned": False}
+        if connection["auto_dispatch"]:
+            dispatch = dispatch_order_automatically(conn, order_id, zone_id)
+        event_message = f"Commande {order_number} créée"
+        if dispatch.get("assigned"):
+            event_message += f" et affectée à {dispatch['courier_name']}"
+        elif connection["auto_dispatch"]:
+            event_message += f" ; dispatch en attente ({dispatch.get('message', 'indisponible')})"
+        record_event(conn, connection["id"], external_id, "success", event_message, order_id)
         conn.commit()
         conn.close()
-        return jsonify({"ok": True, "order_id": order_id, "order_number": order_number}), 201
+        if dispatch.get("assigned"):
+            send_courier_notification(order_id, dispatch["courier_id"])
+        return jsonify({
+            "ok": True,
+            "order_id": order_id,
+            "order_number": order_number,
+            "auto_dispatch": dispatch,
+        }), 201
     except (TypeError, ValueError) as exc:
         external_id = text(payload.get("id") if isinstance(payload, dict) else "")
         record_event(conn, connection["id"], external_id, "error", str(exc))
         conn.commit()
         conn.close()
         return jsonify({"ok": False, "error": str(exc)}), 422
+
+
+def bearer_token():
+    authorization = request.headers.get("Authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return ""
+
+
+@api_bp.route("/commandes", methods=["POST"])
+def api_create_order():
+    token = bearer_token()
+    if not token:
+        return jsonify({"ok": False, "error": "Jeton Bearer manquant."}), 401
+    conn = get_db()
+    exists = conn.execute(
+        "SELECT id FROM shop_connections WHERE webhook_token=? AND is_active=1", (token,)
+    ).fetchone()
+    conn.close()
+    if not exists:
+        return jsonify({"ok": False, "error": "Jeton API invalide."}), 401
+    return receive_webhook(token)
+
+
+@api_bp.route("/commandes/<external_id>", methods=["GET"])
+def api_order_status(external_id):
+    token = bearer_token()
+    conn = get_db()
+    connection = conn.execute(
+        "SELECT id FROM shop_connections WHERE webhook_token=? AND is_active=1", (token,)
+    ).fetchone() if token else None
+    if not connection:
+        conn.close()
+        return jsonify({"ok": False, "error": "Jeton API invalide."}), 401
+    order = conn.execute(
+        "SELECT id, order_number, status, livreur_id, delivered_at, created_at FROM orders "
+        "WHERE shop_connection_id=? AND external_order_id=?",
+        (connection["id"], external_id),
+    ).fetchone()
+    if not order:
+        conn.close()
+        return jsonify({"ok": False, "error": "Commande introuvable."}), 404
+    location = conn.execute(
+        "SELECT latitude, longitude, accuracy, recorded_at FROM courier_locations "
+        "WHERE order_id=? ORDER BY recorded_at DESC, id DESC LIMIT 1",
+        (order["id"],),
+    ).fetchone()
+    conn.close()
+    return jsonify({
+        "ok": True,
+        "order": dict(order),
+        "gps": dict(location) if location else None,
+    })

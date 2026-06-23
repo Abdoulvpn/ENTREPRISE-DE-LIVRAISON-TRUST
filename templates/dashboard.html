@@ -1,135 +1,79 @@
 {% extends "base.html" %}
 {% block title %}Tableau de bord — TrustDelivery{% endblock %}
-{% block page_title %}Tableau de bord{% endblock %}
+{% block page_title %}Tableau de bord analytique{% endblock %}
 {% block content %}
 
+<form method="get" class="td-card mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <strong>Filtres</strong><a href="{{ url_for('dashboard.index') }}" class="btn btn-sm td-btn-outline">Réinitialiser</a>
+  </div>
+  <div class="row g-2">
+    {% set filters = [
+      ('manager_id','Manager',options.managers,'full_name'), ('employee_id','Employé',options.employees,'full_name'),
+      ('account_id','Compte',options.accounts,'name'), ('seller_id','Client seller',options.sellers,'full_name'),
+      ('affiliate_id','Client affilié',options.affiliates,'full_name'), ('courier_id','Livreur',options.couriers,'full_name'),
+      ('sub_courier_id','Sous-livreur',options.sub_couriers,'full_name'), ('zone_id','Ville',options.zones,'name'),
+      ('product_id','Produit',options.products,'name') ] %}
+    {% for key, label, rows, label_key in filters %}
+    <div class="col-sm-6 col-lg-3">
+      <label class="form-label">{{ label }}</label>
+      <select name="{{ key }}" class="form-select">
+        <option value="">Tous</option>
+        {% for row in rows %}<option value="{{ row.id }}" {{ 'selected' if selected[key] == row.id|string }}>{{ row[label_key] }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+    <div class="col-sm-6 col-lg-3"><label class="form-label">Date de début</label><input type="date" name="date_from" class="form-control" value="{{ selected.date_from }}"></div>
+    <div class="col-sm-6 col-lg-3"><label class="form-label">Date de fin</label><input type="date" name="date_to" class="form-control" value="{{ selected.date_to }}"></div>
+    <div class="col-sm-6 col-lg-3 d-flex align-items-end"><button class="btn td-btn-primary w-100">Appliquer les filtres</button></div>
+  </div>
+</form>
+
+<div class="td-section-title"><span>Taux de livraison global</span></div>
 <div class="td-kpi-grid">
-  <div class="td-kpi">
-    <div class="td-kpi-label">Commandes totales</div>
-    <div class="td-kpi-value">{{ stats.total_orders }}</div>
-  </div>
-  <div class="td-kpi orange">
-    <div class="td-kpi-label">En attente de confirmation</div>
-    <div class="td-kpi-value">{{ stats.en_attente }}</div>
-  </div>
-  <div class="td-kpi green">
-    <div class="td-kpi-label">Taux de confirmation</div>
-    <div class="td-kpi-value">{{ stats.taux_confirmation }}%</div>
-  </div>
-  <div class="td-kpi green">
-    <div class="td-kpi-label">Taux de livraison réussie</div>
-    <div class="td-kpi-value">{{ stats.taux_livraison }}%</div>
-  </div>
-  <div class="td-kpi red">
-    <div class="td-kpi-label">Taux de retour</div>
-    <div class="td-kpi-value">{{ stats.taux_retour }}%</div>
-  </div>
-  <div class="td-kpi">
-    <div class="td-kpi-label">Chiffre d'affaires (livré)</div>
-    <div class="td-kpi-value">{{ stats.ca_total | money }}</div>
-  </div>
+  <div class="td-kpi"><div class="td-kpi-label">Tous (100%)</div><div class="td-kpi-value">{{ stats.total_orders }}</div></div>
+  <div class="td-kpi green"><div class="td-kpi-label">Livré</div><div class="td-kpi-value">{{ stats.delivered }} <small>{{ stats.delivered_pct }}%</small></div></div>
+  <div class="td-kpi"><div class="td-kpi-label">En cours &amp; expédié</div><div class="td-kpi-value">{{ stats.in_progress }} <small>{{ stats.in_progress_pct }}%</small></div></div>
+  <div class="td-kpi orange"><div class="td-kpi-label">PDR &amp; injoignable</div><div class="td-kpi-value">{{ stats.pdr }} <small>{{ stats.pdr_pct }}%</small></div></div>
+  <div class="td-kpi orange"><div class="td-kpi-label">Reporté &amp; intéressé</div><div class="td-kpi-value">{{ stats.postponed }} <small>{{ stats.postponed_pct }}%</small></div></div>
+  <div class="td-kpi red"><div class="td-kpi-label">Annulé &amp; refusé</div><div class="td-kpi-value">{{ stats.cancelled }} <small>{{ stats.cancelled_pct }}%</small></div></div>
 </div>
 
 <div class="row g-3">
-  <div class="col-lg-7">
-    <div class="td-card">
-      <h6 class="mb-3">Évolution du chiffre d'affaires (7 derniers jours)</h6>
-      <canvas id="caChart" height="110"></canvas>
-    </div>
-  </div>
-  <div class="col-lg-5">
-    <div class="td-card">
-      <h6 class="mb-3">Performance par zone</h6>
-      <div class="table-responsive">
-        <table class="td-table">
-          <thead><tr><th>Zone</th><th>Commandes</th><th>CA livré</th></tr></thead>
-          <tbody>
-          {% for z in perf_zone %}
-            <tr>
-              <td>{{ z.zone_name or 'Non définie' }}</td>
-              <td>{{ z.nb_commandes }}</td>
-              <td>{{ z.ca | money }}</td>
-            </tr>
-          {% else %}
-            <tr><td colspan="3" class="td-empty">Aucune donnée pour le moment.</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+  {% set groups = [
+    ('Chiffres d’affaires', [('Total CA',stats.ca_total),('CA versé',stats.ca_paid),('CA non versé',stats.ca_unpaid),('Frais de livraison',stats.delivery_fees)]),
+    ('Profits', [('Bénéfices livraison',stats.delivery_profit),('Dépenses et charges',stats.expenses),('Profit net',stats.net_profit)]),
+    ('CA Livreur', [('Total CA livreur',stats.courier_ca),('CA livreur versé',stats.courier_paid),('CA livreur non versé',stats.courier_unpaid)]) ] %}
+  {% for title, metrics in groups %}
+  <div class="col-lg-4"><div class="td-card h-100"><h6>{{ title }}</h6>{% for label, value in metrics %}<div class="d-flex justify-content-between py-2 border-bottom"><span class="td-muted">{{ label }}</span><strong>{{ value|money }}</strong></div>{% endfor %}</div></div>
+  {% endfor %}
 </div>
 
 <div class="row g-3 mt-1">
-  <div class="col-lg-7">
-    <div class="td-section-title">
-      Commandes récentes
-      <a href="{{ url_for('orders.list_orders') }}" class="td-muted" style="font-size:13px;">Voir tout →</a>
-    </div>
-    <div class="td-table-wrap">
-      <table class="td-table">
-        <thead><tr><th>N°</th><th>Client</th><th>Statut</th><th>Montant</th><th></th></tr></thead>
-        <tbody>
-        {% for o in recent_orders %}
-          <tr>
-            <td>{{ o.order_number }}</td>
-            <td>{{ o.client_name }}</td>
-            <td><span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[o.status] }}">{{ o.status }}</span></td>
-            <td>{{ (o.total_amount + o.delivery_fee) | money }}</td>
-            <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>
-          </tr>
-        {% else %}
-          <tr><td colspan="5" class="td-empty">Aucune commande pour le moment.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  <div class="col-lg-5">
-    <div class="td-section-title">Alertes de rupture de stock</div>
-    <div class="td-table-wrap">
-      <table class="td-table">
-        <thead><tr><th>Produit</th><th>Stock</th><th>Seuil</th></tr></thead>
-        <tbody>
-        {% for a in alerts_stock %}
-          <tr>
-            <td>{{ a.name }} <span class="td-muted">({{ a.sku }})</span></td>
-            <td><strong style="color:#dc2626;">{{ a.quantity }}</strong></td>
-            <td>{{ a.alert_threshold }}</td>
-          </tr>
-        {% else %}
-          <tr><td colspan="3" class="td-empty">Aucune alerte. Les niveaux de stock sont sains.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
+  <div class="col-lg-7"><div class="td-card h-100"><h6 class="mb-3">Évolution du CA livré</h6><canvas id="caChart" height="110"></canvas></div></div>
+  <div class="col-lg-5"><div class="td-card h-100"><h6 class="mb-3">Performance par ville</h6><div class="table-responsive"><table class="td-table"><thead><tr><th>Ville</th><th>Commandes</th><th>CA livré</th></tr></thead><tbody>{% for z in perf_zone %}<tr><td>{{ z.zone_name }}</td><td>{{ z.nb_commandes }}</td><td>{{ z.ca|money }}</td></tr>{% else %}<tr><td colspan="3" class="td-empty">Aucune donnée.</td></tr>{% endfor %}</tbody></table></div></div></div>
 </div>
 
+<div class="td-section-title"><span>Performance de confirmation et de livraison</span><span class="td-muted" style="font-size:12px">Livraison = livré / confirmé</span></div>
+<div class="row g-3">
+  {% for title, rows in [('Par produit',product_perf),('Par fournisseur',supplier_perf),('Par livreur',courier_perf)] %}
+  <div class="col-xl-4"><div class="td-table-wrap"><table class="td-table"><thead><tr><th colspan="3">{{ title }}</th></tr><tr><th>Nom</th><th>Confirmation</th><th>Livraison</th></tr></thead><tbody>{% for row in rows %}<tr><td>{{ row.label }}</td><td>{{ row.confirmed }}/{{ row.total }} · {{ row.confirmation_rate }}%</td><td>{{ row.delivered }}/{{ row.confirmed }} · {{ row.delivery_rate }}%</td></tr>{% else %}<tr><td colspan="3" class="td-empty">Aucune donnée.</td></tr>{% endfor %}</tbody></table></div></div>
+  {% endfor %}
+</div>
+
+<div class="row g-3 mt-3">
+  <div class="col-lg-7"><div class="td-section-title">Commandes récentes</div><div class="td-table-wrap"><table class="td-table"><thead><tr><th>N°</th><th>Client</th><th>Statut</th><th>Montant</th></tr></thead><tbody>{% for o in recent_orders %}<tr><td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}">{{ o.order_number }}</a></td><td>{{ o.client_name }}</td><td><span class="td-badge td-status">{{ o.status|replace('_',' ') }}</span></td><td>{{ (o.total_amount + o.delivery_fee)|money }}</td></tr>{% else %}<tr><td colspan="4" class="td-empty">Aucune commande.</td></tr>{% endfor %}</tbody></table></div></div>
+  <div class="col-lg-5"><div class="td-section-title">Alertes stock</div><div class="td-table-wrap"><table class="td-table"><thead><tr><th>Produit</th><th>Restant</th><th>Seuil</th></tr></thead><tbody>{% for a in alerts_stock %}<tr><td>{{ a.name }} <span class="td-muted">{{ a.sku }}</span></td><td class="text-danger fw-bold">{{ a.quantity }}</td><td>{{ a.alert_threshold }}</td></tr>{% else %}<tr><td colspan="3" class="td-empty">Aucune alerte.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+
+<div class="td-section-title"><span>Historique d’activité</span><a href="{{ url_for('settings.audit_log') }}" class="td-muted" style="font-size:13px">Journal complet →</a></div>
+<div class="td-table-wrap"><table class="td-table"><thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Détails</th></tr></thead><tbody>{% for a in activities %}<tr><td>{{ a.created_at|dt }}</td><td>{{ a.user_name }}</td><td>{{ a.action }}</td><td>{{ a.details or '—' }}</td></tr>{% else %}<tr><td colspan="4" class="td-empty">Aucune activité.</td></tr>{% endfor %}</tbody></table></div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
-  const chartData = {{ chart_data | safe }};
-  new Chart(document.getElementById('caChart'), {
-    type: 'line',
-    data: {
-      labels: chartData.days,
-      datasets: [{
-        label: 'CA (GNF)',
-        data: chartData.ca_per_day,
-        borderColor: '#1e4fd6',
-        backgroundColor: 'rgba(30,79,214,0.12)',
-        fill: true,
-        tension: 0.35,
-        pointBackgroundColor: '#f59e0b',
-      }]
-    },
-    options: {
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } }
-    }
-  });
+const chartData={{ chart_data|safe }};
+new Chart(document.getElementById('caChart'),{type:'line',data:{labels:chartData.days,datasets:[{data:chartData.ca_per_day,borderColor:'#1e4fd6',backgroundColor:'rgba(30,79,214,.12)',fill:true,tension:.35}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
 </script>
 {% endblock %}

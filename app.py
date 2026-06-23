@@ -24,7 +24,7 @@ def create_app():
 
     @app.url_defaults
     def add_tab_id(endpoint, values):
-        if endpoint in ("static", "shops.receive_webhook") or "_tab" in values:
+        if endpoint in ("static", "shops.receive_webhook") or endpoint.startswith("partner_api.") or "_tab" in values:
             return
         tab_id = g.get("tab_id")
         if tab_id:
@@ -38,6 +38,7 @@ def create_app():
     app.register_blueprint(invoices_routes.bp)
     app.register_blueprint(settings_routes.bp)
     app.register_blueprint(shop_routes.bp)
+    app.register_blueprint(shop_routes.api_bp)
 
     @app.context_processor
     def inject_globals():

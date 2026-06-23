@@ -4,7 +4,7 @@
 {% block content %}
 
 <div class="td-card" style="max-width:620px;">
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     <div class="row">
       <div class="col-7 mb-3">
         <label class="form-label">Nom du produit</label>
@@ -26,17 +26,26 @@
       </div>
       <div class="col-4 mb-3">
         <label class="form-label">Client fournisseur</label>
-        <select name="supplier_client_id" class="form-select" required>
+        {% if current_user.role == 'client' %}
+        <input class="form-control" value="{{ current_user.full_name }}" disabled>
+        {% else %}<select name="supplier_client_id" class="form-select" required>
           <option value="">Sélectionner un client</option>
           {% for c in clients %}
           <option value="{{ c.id }}" {{ 'selected' if product and product.supplier_client_id == c.id }}>{{ c.full_name }}</option>
           {% endfor %}
-        </select>
+        </select>{% endif %}
       </div>
       <div class="col-4 mb-3">
         <label class="form-label">Prix unitaire (GNF)</label>
         <input type="number" step="1" name="price" class="form-control" required value="{{ product.price if product else '' }}">
       </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3"><label class="form-label">Lien du produit</label><input type="url" name="link" class="form-control" value="{{ product.link if product else '' }}"></div>
+      <div class="col-md-6 mb-3"><label class="form-label">Photo du produit</label><input type="file" name="photo" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp"></div>
+      <div class="col-md-8 mb-3"><label class="form-label">Description / note de stock</label><input type="text" name="note" class="form-control" value="{{ product.stock_note if product else '' }}"></div>
+      <div class="col-md-4 mb-3"><label class="form-label">Quantité endommagée</label><input type="number" min="0" name="damaged_qty" class="form-control" value="{{ product.damaged_qty if product else 0 }}"></div>
+      <div class="col-12 mb-3"><div class="form-check"><input class="form-check-input" type="checkbox" name="visible_seller" id="visibleSeller" {{ 'checked' if product and product.stock_visible_seller }}><label class="form-check-label" for="visibleSeller">Visible aux confirmateurs (cloche Seller)</label></div></div>
     </div>
 
     {% if not product %}

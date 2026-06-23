@@ -52,10 +52,10 @@
             <span class="td-muted">-</span>
           {% endif %}
         </td>
-        <td><span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[o.status] }}">{{ o.status }}</span></td>
+        <td><span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','proposee':'#8b5cf6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[o.status] }}">{{ o.status }}</span></td>
         <td>{{ o.total_amount | money }}</td>
         <td class="td-muted">{{ o.created_at | dt }}</td>
-        <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>
+        <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="{{ 'td-btn-primary' if current_user.role == 'livreur' and o.status == 'proposee' else 'td-btn-outline' }} btn btn-sm">{{ 'Accepter' if current_user.role == 'livreur' and o.status == 'proposee' else 'Voir' }}</a></td>
       </tr>
     {% else %}
       <tr><td colspan="9" class="td-empty">Aucune commande trouvee.</td></tr>

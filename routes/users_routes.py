@@ -30,7 +30,11 @@ def create_user():
         email = request.form.get("email", "").strip().lower()
         role = request.form.get("role")
         phone = request.form.get("phone", "").strip()
+        whatsapp_phone = request.form.get("whatsapp_phone", "").strip()
         zone = request.form.get("zone", "").strip()
+        manager_id = request.form.get("manager_id") or None
+        client_type = request.form.get("client_type") or "seller"
+        parent_courier_id = request.form.get("parent_courier_id") or None
         password = request.form.get("password", "")
 
         error = None
@@ -48,8 +52,8 @@ def create_user():
                 error = "Cet email est déjà utilisé."
             else:
                 conn.execute(
-                    "INSERT INTO users (full_name, email, password_hash, role, phone, zone, is_active) VALUES (?,?,?,?,?,?,1)",
-                    (full_name, email, generate_password_hash(password), role, phone, zone),
+                    "INSERT INTO users (full_name, email, password_hash, role, phone, whatsapp_phone, zone, manager_id, client_type, parent_courier_id, is_active) VALUES (?,?,?,?,?,?,?,?,?,?,1)",
+                    (full_name, email, generate_password_hash(password), role, phone, whatsapp_phone, zone, manager_id, client_type, parent_courier_id),
                 )
                 conn.commit()
                 log_action(g.user, "Création utilisateur", f"{full_name} ({email}) — rôle : {ROLES.get(role)}")
@@ -60,7 +64,11 @@ def create_user():
 
         flash(error, "danger")
 
-    return render_template("user_form.html", roles=ROLES, user=None)
+    conn = get_db()
+    managers = conn.execute("SELECT id, full_name FROM users WHERE role IN ('super_admin','moderateur') AND is_active=1 ORDER BY full_name").fetchall()
+    couriers = conn.execute("SELECT id, full_name FROM users WHERE role='livreur' AND parent_courier_id IS NULL AND is_active=1 ORDER BY full_name").fetchall()
+    conn.close()
+    return render_template("user_form.html", roles=ROLES, user=None, managers=managers, couriers=couriers)
 
 
 @bp.route("/<int:user_id>/modifier", methods=["GET", "POST"])
@@ -82,7 +90,11 @@ def edit_user(user_id):
         full_name = request.form.get("full_name", "").strip()
         role = request.form.get("role")
         phone = request.form.get("phone", "").strip()
+        whatsapp_phone = request.form.get("whatsapp_phone", "").strip()
         zone = request.form.get("zone", "").strip()
+        manager_id = request.form.get("manager_id") or None
+        client_type = request.form.get("client_type") or "seller"
+        parent_courier_id = request.form.get("parent_courier_id") or None
         is_active = 1 if request.form.get("is_active") == "on" else 0
         new_password = request.form.get("password", "")
 
@@ -93,13 +105,13 @@ def edit_user(user_id):
 
         if new_password:
             conn.execute(
-                "UPDATE users SET full_name=?, role=?, phone=?, zone=?, is_active=?, password_hash=? WHERE id=?",
-                (full_name, role, phone, zone, is_active, generate_password_hash(new_password), user_id),
+                "UPDATE users SET full_name=?, role=?, phone=?, whatsapp_phone=?, zone=?, manager_id=?, client_type=?, parent_courier_id=?, is_active=?, password_hash=? WHERE id=?",
+                (full_name, role, phone, whatsapp_phone, zone, manager_id, client_type, parent_courier_id, is_active, generate_password_hash(new_password), user_id),
             )
         else:
             conn.execute(
-                "UPDATE users SET full_name=?, role=?, phone=?, zone=?, is_active=? WHERE id=?",
-                (full_name, role, phone, zone, is_active, user_id),
+                "UPDATE users SET full_name=?, role=?, phone=?, whatsapp_phone=?, zone=?, manager_id=?, client_type=?, parent_courier_id=?, is_active=? WHERE id=?",
+                (full_name, role, phone, whatsapp_phone, zone, manager_id, client_type, parent_courier_id, is_active, user_id),
             )
         conn.commit()
         log_action(g.user, "Modification utilisateur", f"Compte #{user_id} ({full_name}) mis à jour")
@@ -107,8 +119,10 @@ def edit_user(user_id):
         flash("Compte mis à jour avec succès.", "success")
         return redirect(url_for("users.list_users"))
 
+    managers = conn.execute("SELECT id, full_name FROM users WHERE role IN ('super_admin','moderateur') AND is_active=1 ORDER BY full_name").fetchall()
+    couriers = conn.execute("SELECT id, full_name FROM users WHERE role='livreur' AND parent_courier_id IS NULL AND is_active=1 AND id<>? ORDER BY full_name", (user_id,)).fetchall()
     conn.close()
-    return render_template("user_form.html", roles=ROLES, user=user)
+    return render_template("user_form.html", roles=ROLES, user=user, managers=managers, couriers=couriers)
 
 
 @bp.route("/<int:user_id>/supprimer", methods=["POST"])

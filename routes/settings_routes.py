@@ -80,6 +80,7 @@ def profile():
     if request.method == "POST":
         full_name = request.form.get("full_name", "").strip()
         phone = request.form.get("phone", "").strip()
+        whatsapp_phone = request.form.get("whatsapp_phone", "").strip()
         current_password = request.form.get("current_password", "")
         new_password = request.form.get("new_password", "")
 
@@ -89,11 +90,14 @@ def profile():
                 conn.close()
                 return redirect(url_for("settings.profile"))
             conn.execute(
-                "UPDATE users SET full_name=?, phone=?, password_hash=? WHERE id=?",
-                (full_name, phone, generate_password_hash(new_password), g.user["id"]),
+                "UPDATE users SET full_name=?, phone=?, whatsapp_phone=?, password_hash=? WHERE id=?",
+                (full_name, phone, whatsapp_phone, generate_password_hash(new_password), g.user["id"]),
             )
         else:
-            conn.execute("UPDATE users SET full_name=?, phone=? WHERE id=?", (full_name, phone, g.user["id"]))
+            conn.execute(
+                "UPDATE users SET full_name=?, phone=?, whatsapp_phone=? WHERE id=?",
+                (full_name, phone, whatsapp_phone, g.user["id"]),
+            )
         conn.commit()
         log_action(g.user, "Mise à jour profil", "")
         conn.close()

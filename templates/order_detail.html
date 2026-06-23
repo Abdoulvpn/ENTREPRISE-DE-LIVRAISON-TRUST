@@ -11,7 +11,7 @@
       <div class="d-flex justify-content-between align-items-start mb-3">
         <div>
           <h5 class="mb-1">{{ order.order_number }}</h5>
-          <span class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[order.status] }}">{{ order.status }}</span>
+          <span id="live-status" class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','proposee':'#8b5cf6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[order.status] }}">{{ order.status }}</span>
         </div>
         <div class="text-end td-muted" style="font-size:13px;">
           Créée le {{ order.created_at | dt }}
@@ -71,6 +71,19 @@
       <p class="mb-1" style="font-size:13.5px;">Confirmée par : <strong>{{ order.confirmed_by_name or '—' }}</strong></p>
       <p class="mb-1" style="font-size:13.5px;">Livreur assigné : <strong>{{ order.livreur_name or '—' }}</strong></p>
       <p class="mb-0" style="font-size:13.5px;">Livrée le : <strong>{{ order.delivered_at | dt if order.delivered_at else '—' }}</strong></p>
+      <hr class="td-divider">
+      <p class="mb-1" style="font-size:13.5px;"><strong>Position GPS du livreur</strong></p>
+      <div id="live-gps" class="td-muted" style="font-size:13px;">
+        {% if last_location %}
+        <a href="https://www.openstreetmap.org/?mlat={{ last_location.latitude }}&mlon={{ last_location.longitude }}#map=16/{{ last_location.latitude }}/{{ last_location.longitude }}" target="_blank" rel="noopener">Voir la dernière position</a><br>
+        Mise à jour : {{ last_location.recorded_at | dt }}
+        {% else %}
+        Position en attente.
+        {% endif %}
+      </div>
+      {% if current_user.role == 'livreur' and order.livreur_id == current_user.id and order.status in ['affectee', 'en_livraison'] %}
+      <div class="alert alert-info mt-2 mb-0 py-2" style="font-size:12.5px;">Autorisez la localisation sur votre téléphone et gardez cette page ouverte pendant la livraison.</div>
+      {% endif %}
     </div>
 
     <div class="td-card">
@@ -93,7 +106,17 @@
       {% endif %}
 
       {% if current_user.role == 'livreur' and order.livreur_id == current_user.id %}
-        {% if order.status == 'affectee' %}
+        {% if order.status == 'proposee' %}
+          <div class="alert alert-info py-2">Cette livraison vous est proposée. Acceptez-la avant de commencer.</div>
+          <form method="post" action="{{ url_for('orders.respond_to_assignment', order_id=order.id) }}" class="mb-2">
+            <input type="hidden" name="action" value="accept">
+            <button type="submit" class="btn td-btn-primary w-100">✓ Accepter la livraison</button>
+          </form>
+          <form method="post" action="{{ url_for('orders.respond_to_assignment', order_id=order.id) }}" class="mb-2">
+            <input type="hidden" name="action" value="reject">
+            <button type="submit" class="btn btn-outline-danger w-100">Refuser</button>
+          </form>
+        {% elif order.status == 'affectee' %}
           <form method="post" action="{{ url_for('orders.update_delivery_status', order_id=order.id) }}" class="mb-2">
             <input type="hidden" name="new_status" value="en_livraison">
             <button type="submit" class="btn td-btn-primary w-100">🚚 Démarrer la livraison</button>
@@ -107,6 +130,14 @@
             <input type="hidden" name="new_status" value="retournee">
             <button type="submit" class="btn btn-outline-danger w-100" onclick="return confirm('Confirmer le retour de cette commande ?');">↩ Marquer comme retournée</button>
           </form>
+        {% endif %}
+      {% endif %}
+
+      {% if order.status == 'proposee' and current_user.role in ['super_admin','moderateur','agent_confirmation'] %}
+        {% if courier_whatsapp_url %}
+        <a href="{{ courier_whatsapp_url }}" target="_blank" rel="noopener" class="btn btn-success w-100 mb-2">Notifier {{ order.livreur_name }} sur WhatsApp</a>
+        {% else %}
+        <div class="alert alert-warning py-2">Le livreur doit lier son numéro WhatsApp dans « Mon profil ».</div>
         {% endif %}
       {% endif %}
 
@@ -130,4 +161,50 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const realtimeUrl = {{ url_for('orders.realtime_order', order_id=order.id) | tojson }};
+    const gpsElement = document.getElementById('live-gps');
+    const statusElement = document.getElementById('live-status');
+
+    async function refreshOrder() {
+      try {
+        const response = await fetch(realtimeUrl, {headers: {'Accept': 'application/json'}});
+        if (!response.ok) return;
+        const data = await response.json();
+        statusElement.textContent = data.status_label;
+        statusElement.style.background = data.status_color;
+        if (data.gps) {
+          const {latitude, longitude, recorded_at: recordedAt} = data.gps;
+          const mapUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`;
+          gpsElement.innerHTML = `<a href="${mapUrl}" target="_blank" rel="noopener">Voir la position actuelle</a><br>Mise à jour : ${recordedAt}`;
+        }
+      } catch (_error) {}
+    }
+    refreshOrder();
+    window.setInterval(refreshOrder, 10000);
+
+    {% if current_user.role == 'livreur' and order.livreur_id == current_user.id and order.status in ['affectee', 'en_livraison'] %}
+    if (navigator.geolocation) {
+      let lastSent = 0;
+      navigator.geolocation.watchPosition(async (position) => {
+        if (Date.now() - lastSent < 10000) return;
+        lastSent = Date.now();
+        await fetch({{ url_for('orders.update_courier_location', order_id=order.id) | tojson }}, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          })
+        });
+      }, () => {}, {enableHighAccuracy: true, maximumAge: 10000, timeout: 15000});
+    }
+    {% endif %}
+  })();
+</script>
 {% endblock %}

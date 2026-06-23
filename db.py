@@ -39,11 +39,18 @@ ROLES = {
 ORDER_STATUSES = [
     ("en_attente", "En attente de confirmation", "#f59e0b", 1),
     ("confirmee", "Confirmée", "#3b82f6", 2),
-    ("affectee", "Affectée à un livreur", "#6366f1", 3),
-    ("en_livraison", "En cours de livraison", "#0ea5e9", 4),
-    ("livree", "Livrée", "#16a34a", 5),
-    ("annulee", "Annulée", "#dc2626", 6),
-    ("retournee", "Retournée", "#ea580c", 7),
+    ("proposee", "Proposée au livreur", "#8b5cf6", 3),
+    ("affectee", "Acceptée par le livreur", "#6366f1", 4),
+    ("en_livraison", "En cours de livraison", "#0ea5e9", 5),
+    ("expediee", "Expédiée", "#0284c7", 6),
+    ("livree", "Livrée", "#16a34a", 7),
+    ("reportee", "Reportée", "#d97706", 8),
+    ("interessee", "Intéressée", "#ca8a04", 9),
+    ("pdr", "PDR", "#f97316", 10),
+    ("injoignable", "Injoignable", "#a16207", 11),
+    ("refusee", "Refusée", "#b91c1c", 12),
+    ("annulee", "Annulée", "#dc2626", 13),
+    ("retournee", "Retournée", "#ea580c", 14),
 ]
 
 
@@ -71,6 +78,7 @@ def init_db(reset=False):
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL,
             phone TEXT,
+            whatsapp_phone TEXT,
             zone TEXT,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -195,6 +203,7 @@ def init_db(reset=False):
             api_key TEXT,
             api_secret TEXT,
             status_callback_url TEXT,
+            auto_dispatch INTEGER NOT NULL DEFAULT 1,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -218,6 +227,52 @@ def init_db(reset=False):
             message TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS courier_locations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            livreur_id INTEGER NOT NULL REFERENCES users(id),
+            order_id INTEGER NOT NULL REFERENCES orders(id),
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            accuracy REAL,
+            recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS shipments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL REFERENCES users(id),
+            product_title TEXT NOT NULL,
+            ref TEXT NOT NULL,
+            quantity INTEGER NOT NULL DEFAULT 0,
+            description TEXT,
+            link TEXT,
+            photo TEXT,
+            shipment_date TEXT NOT NULL,
+            validated INTEGER NOT NULL DEFAULT 0,
+            product_id INTEGER REFERENCES products(id),
+            created_by INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS courier_stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            courier_id INTEGER NOT NULL REFERENCES users(id),
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            order_id INTEGER REFERENCES orders(id),
+            quantity_taken INTEGER NOT NULL DEFAULT 0,
+            taken_at TEXT NOT NULL DEFAULT (datetime('now')),
+            status TEXT NOT NULL DEFAULT 'pris_en_charge',
+            UNIQUE(courier_id, product_id, order_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            label TEXT NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            expense_date TEXT NOT NULL DEFAULT (date('now')),
+            created_by INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         """
     )
     conn.commit()
@@ -230,6 +285,9 @@ def init_db(reset=False):
 
 
 def ensure_schema(conn):
+    user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "whatsapp_phone" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN whatsapp_phone TEXT")
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(orders)").fetchall()}
     if "recipient_name" not in columns:
         conn.execute("ALTER TABLE orders ADD COLUMN recipient_name TEXT")
@@ -252,6 +310,34 @@ def ensure_schema(conn):
     product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
     if "supplier_client_id" not in product_columns:
         conn.execute("ALTER TABLE products ADD COLUMN supplier_client_id INTEGER REFERENCES users(id)")
+    if "link" not in product_columns:
+        conn.execute("ALTER TABLE products ADD COLUMN link TEXT")
+    if "photo" not in product_columns:
+        conn.execute("ALTER TABLE products ADD COLUMN photo TEXT")
+    stock_columns = {row["name"] for row in conn.execute("PRAGMA table_info(stock)").fetchall()}
+    if "initial_quantity" not in stock_columns:
+        conn.execute("ALTER TABLE stock ADD COLUMN initial_quantity INTEGER NOT NULL DEFAULT 0")
+        conn.execute("UPDATE stock SET initial_quantity=quantity WHERE initial_quantity=0")
+    if "damaged_quantity" not in stock_columns:
+        conn.execute("ALTER TABLE stock ADD COLUMN damaged_quantity INTEGER NOT NULL DEFAULT 0")
+    if "delivered_quantity" not in stock_columns:
+        conn.execute("ALTER TABLE stock ADD COLUMN delivered_quantity INTEGER NOT NULL DEFAULT 0")
+    if "note" not in stock_columns:
+        conn.execute("ALTER TABLE stock ADD COLUMN note TEXT")
+    if "visible_seller" not in stock_columns:
+        conn.execute("ALTER TABLE stock ADD COLUMN visible_seller INTEGER NOT NULL DEFAULT 0")
+    if "is_validated" not in stock_columns:
+        conn.execute("ALTER TABLE stock ADD COLUMN is_validated INTEGER NOT NULL DEFAULT 1")
+    user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "manager_id" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN manager_id INTEGER REFERENCES users(id)")
+    if "client_type" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN client_type TEXT NOT NULL DEFAULT 'seller'")
+    if "parent_courier_id" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN parent_courier_id INTEGER REFERENCES users(id)")
+    order_columns = {row["name"] for row in conn.execute("PRAGMA table_info(orders)").fetchall()}
+    if "courier_paid_amount" not in order_columns:
+        conn.execute("ALTER TABLE orders ADD COLUMN courier_paid_amount REAL NOT NULL DEFAULT 0")
     connection_columns = {row["name"] for row in conn.execute("PRAGMA table_info(shop_connections)").fetchall()}
     if "store_url" not in connection_columns:
         conn.execute("ALTER TABLE shop_connections ADD COLUMN store_url TEXT")
@@ -261,11 +347,31 @@ def ensure_schema(conn):
         conn.execute("ALTER TABLE shop_connections ADD COLUMN api_secret TEXT")
     if "status_callback_url" not in connection_columns:
         conn.execute("ALTER TABLE shop_connections ADD COLUMN status_callback_url TEXT")
+    if "auto_dispatch" not in connection_columns:
+        conn.execute("ALTER TABLE shop_connections ADD COLUMN auto_dispatch INTEGER NOT NULL DEFAULT 1")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_courier_locations_order_time "
+        "ON courier_locations(order_id, recorded_at DESC)"
+    )
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_shop_external "
         "ON orders(shop_connection_id, external_order_id) "
         "WHERE shop_connection_id IS NOT NULL AND external_order_id IS NOT NULL"
     )
+    proposed_exists = conn.execute(
+        "SELECT 1 FROM order_status_config WHERE status_key='proposee'"
+    ).fetchone()
+    if not proposed_exists:
+        conn.execute("UPDATE order_status_config SET sort_order=sort_order+1 WHERE sort_order>=3")
+        conn.execute(
+            "UPDATE order_status_config SET label='Acceptée par le livreur' "
+            "WHERE status_key='affectee' AND label='Affectée à un livreur'"
+        )
+    for key, label, color, order in ORDER_STATUSES:
+        conn.execute(
+            "INSERT OR IGNORE INTO order_status_config (status_key, label, color, sort_order) VALUES (?,?,?,?)",
+            (key, label, color, order),
+        )
     conn.commit()
 
 
