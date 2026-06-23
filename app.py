@@ -87,7 +87,7 @@ if __name__ == "__main__":
     print(" TrustDelivery — Plateforme de Gestion de Livraison")
     print(" Application disponible sur : http://127.0.0.1:5000")
     print(" Compte Super Administrateur :")
-    print("   Email    : thierno.keita@trustdelivery.com")
+    print("   Email    : admin@trustdelivery.com")
     print("   Mot de passe : TrustDelivery@2026")
     print(" (Changez ce mot de passe après la première connexion.)")
     print("=" * 70)
