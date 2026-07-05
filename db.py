@@ -74,15 +74,17 @@ ROLES = {
 REQUIRED_ADMIN_ACCOUNTS = (
     (
         "Thierno Abdoul Keita",
-        "thierno.keita@trustdelivery.com",
-        "scrypt:32768:8:1$YpYE8HusCpqBmF5B$1bd24317beb908fc24b4481460f292d86eb5317a98d930bd21908bf13193153da2d91530e6cb9ccc78c2239d0393117a9c03f0b5d67fd0e316c354effdd3e0d5",
-        1,
+        "ing224@trustdelivery.company",
+        "scrypt:32768:8:1$qkKkjJH7e8GFlMmW$4f38d92e82a2389a9b1f9accf82d9fb3969976171c5d8963f35d9d0202b385e70ad4c64c63ff633c8bbca035ff1b599ca512ea50c49d15eae1de619d8a31f587",
+        2,
+        ("thierno.keita@trustdelivery.com",),
     ),
     (
         "Daouda Bangoura",
-        "daoudabangoura@trustdelivery.com",
-        "scrypt:32768:8:1$Zzh6IgFv3Rq3H7j7$f1a802c32d169a5a1dd1b415a1e2a2139467f91fc5defd7f53f503aada1f7df622bda20c3b23fb8c2c3ced52da3ce55ef8f00fe508bfd8f65482ccea81fcabb1",
-        1,
+        "daouda224@trustdelivery.company",
+        "scrypt:32768:8:1$fC4zNcuBAv9JnV0s$20473ce7a1bf95298423996628837013f6aa68dd82a0302da06bdf9a3a2764b8479ec654f81a38744fec7ef0db54390ef311756c1810d38da24543fc6e64fc73",
+        2,
+        ("daoudabangoura@trustdelivery.com",),
     ),
 )
 
@@ -487,25 +489,64 @@ def init_db(reset=False):
     conn.close()
 
 
+def install_founder_protection(conn):
+    conn.executescript(
+        """
+        CREATE TRIGGER IF NOT EXISTS protect_founder_admin_update
+        BEFORE UPDATE OF full_name, email, role, is_active, is_protected ON users
+        WHEN OLD.is_protected = 1 AND (
+            NEW.full_name IS NOT OLD.full_name
+            OR lower(NEW.email) IS NOT lower(OLD.email)
+            OR NEW.role IS NOT 'super_admin'
+            OR NEW.is_active IS NOT 1
+            OR NEW.is_protected IS NOT 1
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'Ce compte fondateur est protégé');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS protect_founder_admin_delete
+        BEFORE DELETE ON users
+        WHEN OLD.is_protected = 1
+        BEGIN
+            SELECT RAISE(ABORT, 'Ce compte fondateur est protégé');
+        END;
+        """
+    )
+
+
 def ensure_required_admins(conn):
-    for full_name, email, password_hash, credentials_version in REQUIRED_ADMIN_ACCOUNTS:
-        existing = conn.execute(
-            "SELECT id, credentials_version FROM users WHERE lower(email)=lower(?)", (email,)
-        ).fetchone()
-        if existing:
-            reset_credentials = existing["credentials_version"] < credentials_version
-            conn.execute(
-                "UPDATE users SET full_name=?, email=?, role='super_admin', is_active=1, is_protected=1, "
-                "password_hash=CASE WHEN ? THEN ? ELSE password_hash END, credentials_version=? WHERE id=?",
-                (full_name, email, reset_credentials, password_hash, credentials_version, existing["id"]),
-            )
-        else:
-            conn.execute(
-                "INSERT INTO users (full_name, email, password_hash, role, is_active, is_protected, credentials_version) "
-                "VALUES (?,?,?,'super_admin',1,1,?)",
-                (full_name, email, password_hash, credentials_version),
-            )
-    conn.commit()
+    conn.execute("DROP TRIGGER IF EXISTS protect_founder_admin_update")
+    conn.execute("DROP TRIGGER IF EXISTS protect_founder_admin_delete")
+    try:
+        for full_name, email, password_hash, credentials_version, legacy_emails in REQUIRED_ADMIN_ACCOUNTS:
+            candidate_emails = (email, *legacy_emails)
+            placeholders = ",".join("?" for _ in candidate_emails)
+            existing = conn.execute(
+                f"SELECT id, credentials_version FROM users WHERE lower(email) IN ({placeholders}) "
+                "ORDER BY CASE WHEN lower(email)=lower(?) THEN 0 ELSE 1 END LIMIT 1",
+                (*[candidate.lower() for candidate in candidate_emails], email),
+            ).fetchone()
+            if existing:
+                reset_credentials = existing["credentials_version"] < credentials_version
+                conn.execute(
+                    "UPDATE users SET full_name=?, email=?, role='super_admin', is_active=1, is_protected=1, "
+                    "password_hash=CASE WHEN ? THEN ? ELSE password_hash END, credentials_version=? WHERE id=?",
+                    (full_name, email, reset_credentials, password_hash, credentials_version, existing["id"]),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO users (full_name, email, password_hash, role, is_active, is_protected, credentials_version) "
+                    "VALUES (?,?,?,'super_admin',1,1,?)",
+                    (full_name, email, password_hash, credentials_version),
+                )
+        install_founder_protection(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        install_founder_protection(conn)
+        conn.commit()
+        raise
 
 
 def disable_insecure_default_accounts(conn):
@@ -532,29 +573,7 @@ def ensure_schema(conn):
         conn.execute("ALTER TABLE users ADD COLUMN is_protected INTEGER NOT NULL DEFAULT 0")
     if "credentials_version" not in user_columns:
         conn.execute("ALTER TABLE users ADD COLUMN credentials_version INTEGER NOT NULL DEFAULT 0")
-    conn.executescript(
-        """
-        CREATE TRIGGER IF NOT EXISTS protect_founder_admin_update
-        BEFORE UPDATE OF full_name, email, role, is_active, is_protected ON users
-        WHEN OLD.is_protected = 1 AND (
-            NEW.full_name IS NOT OLD.full_name
-            OR lower(NEW.email) IS NOT lower(OLD.email)
-            OR NEW.role IS NOT 'super_admin'
-            OR NEW.is_active IS NOT 1
-            OR NEW.is_protected IS NOT 1
-        )
-        BEGIN
-            SELECT RAISE(ABORT, 'Ce compte fondateur est protégé');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS protect_founder_admin_delete
-        BEFORE DELETE ON users
-        WHEN OLD.is_protected = 1
-        BEGIN
-            SELECT RAISE(ABORT, 'Ce compte fondateur est protégé');
-        END;
-        """
-    )
+    install_founder_protection(conn)
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(orders)").fetchall()}
     if "recipient_name" not in columns:
         conn.execute("ALTER TABLE orders ADD COLUMN recipient_name TEXT")

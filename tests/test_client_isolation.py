@@ -172,23 +172,31 @@ class ClientIsolationTests(unittest.TestCase):
         self.assertTrue(any("monthly" in path for path in generations))
 
     def test_founder_admins_survive_schema_updates_and_are_protected(self):
+        conn = get_db()
+        conn.execute("DROP TRIGGER IF EXISTS protect_founder_admin_update")
+        conn.execute(
+            "UPDATE users SET email=?, credentials_version=1 WHERE lower(email)=?",
+            ("daoudabangoura@trustdelivery.com", "daouda224@trustdelivery.company"),
+        )
+        conn.commit()
+        conn.close()
         init_db()
         conn = get_db()
         admins = conn.execute(
             "SELECT email, role, is_active, is_protected, credentials_version FROM users "
             "WHERE lower(email) IN (?, ?) ORDER BY email",
-            ("thierno.keita@trustdelivery.com", "daoudabangoura@trustdelivery.com"),
+            ("ing224@trustdelivery.company", "daouda224@trustdelivery.company"),
         ).fetchall()
         self.assertEqual(len(admins), 2)
         for admin in admins:
             self.assertEqual(admin["role"], "super_admin")
             self.assertEqual(admin["is_active"], 1)
             self.assertEqual(admin["is_protected"], 1)
-            self.assertEqual(admin["credentials_version"], 1)
+            self.assertEqual(admin["credentials_version"], 2)
         with self.assertRaises(sqlite3.IntegrityError):
             conn.execute(
                 "UPDATE users SET role='client', is_active=0 WHERE lower(email)=?",
-                ("daoudabangoura@trustdelivery.com",),
+                ("daouda224@trustdelivery.company",),
             )
         conn.rollback()
         conn.close()
@@ -217,7 +225,7 @@ class ClientIsolationTests(unittest.TestCase):
     def test_founder_admin_cannot_be_deleted_through_the_ui(self):
         conn = get_db()
         daouda = conn.execute(
-            "SELECT id FROM users WHERE lower(email)=?", ("daoudabangoura@trustdelivery.com",)
+            "SELECT id FROM users WHERE lower(email)=?", ("daouda224@trustdelivery.company",)
         ).fetchone()
         conn.close()
         response = self.logged_client(self.admin_id).post(

@@ -78,8 +78,8 @@ modifiés ou supprimés, même par une écriture SQL accidentelle :
 
 | Nom | Email |
 |---|---|
-| Thierno Abdoul Keita | `thierno.keita@trustdelivery.com` |
-| Daouda Bangoura | `daoudabangoura@trustdelivery.com` |
+| Thierno Abdoul Keita | `ing224@trustdelivery.company` |
+| Daouda Bangoura | `daouda224@trustdelivery.company` |
 
 Les mots de passe initiaux ne sont pas enregistrés en clair dans le dépôt. Chaque
 propriétaire peut ensuite changer son propre mot de passe depuis **Mon profil**.

@@ -104,8 +104,8 @@ if __name__ == "__main__":
     print(" TrustDelivery — Plateforme de Gestion de Livraison")
     print(" Application disponible sur : http://127.0.0.1:5000")
     print(" Comptes fondateurs protégés :")
-    print("   thierno.keita@trustdelivery.com")
-    print("   daoudabangoura@trustdelivery.com")
+    print("   ing224@trustdelivery.company")
+    print("   daouda224@trustdelivery.company")
     print("=" * 70)
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_ENV") != "production"
