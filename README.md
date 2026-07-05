@@ -72,12 +72,12 @@ automatiquement au premier démarrage.
 
 ## Compte Super Administrateur
 
-Conformément à votre demande, le compte Super Administrateur appartient à
-**Thierno Abdoul Keita** :
+Un compte administrateur de secours est créé automatiquement, y compris lorsque
+la base de données existe déjà :
 
 | Champ | Valeur |
 |---|---|
-| Email | `thierno.keita@trustdelivery.com` |
+| Email | `admin@trustdelivery.com` |
 | Mot de passe | `TrustDelivery@2026` |
 
 ⚠️ **Changez ce mot de passe dès la première connexion** (menu "Mon profil").

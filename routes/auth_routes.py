@@ -28,7 +28,7 @@ def login():
         password = request.form.get("password", "")
 
         conn = get_db()
-        user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE lower(email) = ?", (email,)).fetchone()
         conn.close()
 
         error = None

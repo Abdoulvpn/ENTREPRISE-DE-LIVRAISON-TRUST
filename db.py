@@ -70,6 +70,11 @@ ROLES = {
 # le mot de passe temporaire doit être changé dès la première connexion.
 REQUIRED_ADMIN_ACCOUNTS = (
     (
+        "Administrateur TrustDelivery",
+        "admin@trustdelivery.com",
+        "scrypt:32768:8:1$hFGGWigRFQ1v6YW6$1fb19aae80039abb3583894d609f0e10a9ae02eeb7a38b881512af30b05c93d1c51a0dbf88fa0d60519d27c3a33f7c3f1168d371c5a8245784c630ad9558ef99",
+    ),
+    (
         "Daouda Bangoura",
         "daoudabangoura@trustdelivery.com",
         "scrypt:32768:8:1$H61pz7oK40UAFzIf$0a3f3bfd35a3d5f9013d914efa7644e2258e28b4a9b207c2c4014dc9f023ad2d2a4ec4681d6f5a3546531ab75c340b75e7b33b40b4f3f89b110809a1cb13c3c4",

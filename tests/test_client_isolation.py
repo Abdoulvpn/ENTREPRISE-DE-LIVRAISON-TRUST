@@ -143,6 +143,20 @@ class ClientIsolationTests(unittest.TestCase):
         self.assertEqual(admin["role"], "super_admin")
         self.assertEqual(admin["is_active"], 1)
 
+    def test_required_admin_can_log_in_with_documented_credentials(self):
+        client = app.test_client()
+        response = client.post(
+            "/login",
+            data={
+                "email": "ADMIN@TRUSTDELIVERY.COM",
+                "password": "TrustDelivery@2026",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/dashboard?", response.headers["Location"])
+        self.assertIn("_tab=", response.headers["Location"])
+
     def test_super_admin_can_download_database_backup(self):
         client = self.logged_client(self.admin_id)
         response = client.get("/parametres/sauvegarde-base?_tab=test-tab")
