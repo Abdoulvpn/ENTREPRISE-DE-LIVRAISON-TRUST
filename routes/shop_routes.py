@@ -341,7 +341,7 @@ def receive_webhook(token):
         items = []
         for sku, quantity in quantities.items():
             product = conn.execute(
-                "SELECT id FROM products WHERE lower(sku)=lower(?) AND supplier_client_id=? AND is_validated=1",
+                "SELECT id FROM products WHERE lower(sku)=lower(?) AND supplier_client_id=? AND is_validated=1 AND is_archived=0",
                 (sku, connection["client_id"]),
             ).fetchone()
             if not product:

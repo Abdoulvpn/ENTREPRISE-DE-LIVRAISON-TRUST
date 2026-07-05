@@ -36,11 +36,15 @@
           {% endif %}
         </td>
         <td>
+          {% if u.is_protected %}
+            <span class="td-badge" style="background:#334155;">Protégé</span>
+          {% else %}
           <a href="{{ url_for('users.edit_user', user_id=u.id) }}" class="td-btn-outline btn btn-sm">Modifier</a>
           {% if current_user.role == 'super_admin' and u.id != current_user.id %}
-          <form method="post" action="{{ url_for('users.delete_user', user_id=u.id) }}" style="display:inline;" onsubmit="return confirm('Supprimer définitivement ce compte ?');">
-            <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
+          <form method="post" action="{{ url_for('users.delete_user', user_id=u.id) }}" style="display:inline;" onsubmit="return confirm('Désactiver ce compte tout en conservant ses données ?');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Désactiver</button>
           </form>
+          {% endif %}
           {% endif %}
         </td>
       </tr>

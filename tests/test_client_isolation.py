@@ -1,5 +1,6 @@
 import os
 import shutil
+import sqlite3
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
@@ -11,7 +12,7 @@ TEST_DIR = tempfile.mkdtemp(prefix="trustdelivery-tests-")
 os.environ["DATABASE_PATH"] = os.path.join(TEST_DIR, "test.db")
 
 from app import app  # noqa: E402
-from db import get_db, backup_database, init_db  # noqa: E402
+from db import get_db, backup_database, init_db, maintain_database_backups  # noqa: E402
 from routes.shop_routes import normalize_order_payload  # noqa: E402
 from integrations import send_order_notification, sync_shop_status  # noqa: E402
 
@@ -122,6 +123,39 @@ class ClientIsolationTests(unittest.TestCase):
         self.assertIn(b"Stock Client Beta", response.data)
         self.assertNotIn(b"Stock Client Alpha", response.data)
 
+    def test_product_archiving_preserves_stock_history(self):
+        conn = get_db()
+        product_id = self._insert_product(
+            conn, "Archive Test", "TEST-ARCHIVE", self.first_client_id
+        )
+        conn.execute(
+            "INSERT INTO stock_movements (product_id, warehouse_id, movement_type, quantity, note, created_by) "
+            "VALUES (?,?,?,?,?,?)",
+            (product_id, self.warehouse_id, "entree", 20, "Archive test", self.admin_id),
+        )
+        conn.commit()
+        conn.close()
+
+        response = self.logged_client(self.admin_id).post(
+            f"/produits/{product_id}/supprimer?_tab=test-tab", follow_redirects=False
+        )
+        self.assertEqual(response.status_code, 302)
+        conn = get_db()
+        product = conn.execute(
+            "SELECT is_archived, is_validated FROM products WHERE id=?", (product_id,)
+        ).fetchone()
+        stock_count = conn.execute(
+            "SELECT COUNT(*) count FROM stock WHERE product_id=?", (product_id,)
+        ).fetchone()["count"]
+        movement_count = conn.execute(
+            "SELECT COUNT(*) count FROM stock_movements WHERE product_id=?", (product_id,)
+        ).fetchone()["count"]
+        conn.close()
+        self.assertEqual(product["is_archived"], 1)
+        self.assertEqual(product["is_validated"], 0)
+        self.assertGreater(stock_count, 0)
+        self.assertGreater(movement_count, 0)
+
     def test_database_backup_is_valid_and_reset_is_blocked(self):
         backup_path = backup_database(force=True)
         self.assertTrue(os.path.exists(backup_path))
@@ -131,31 +165,91 @@ class ClientIsolationTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             init_db(reset=True)
 
-    def test_required_daouda_admin_survives_schema_updates(self):
+        generations = maintain_database_backups()
+        self.assertEqual(len(generations), 3)
+        self.assertTrue(any("hourly" in path for path in generations))
+        self.assertTrue(any("daily" in path for path in generations))
+        self.assertTrue(any("monthly" in path for path in generations))
+
+    def test_founder_admins_survive_schema_updates_and_are_protected(self):
         init_db()
         conn = get_db()
-        admin = conn.execute(
-            "SELECT role, is_active FROM users WHERE lower(email)=?",
-            ("daoudabangoura@trustdelivery.com",),
-        ).fetchone()
+        admins = conn.execute(
+            "SELECT email, role, is_active, is_protected, credentials_version FROM users "
+            "WHERE lower(email) IN (?, ?) ORDER BY email",
+            ("thierno.keita@trustdelivery.com", "daoudabangoura@trustdelivery.com"),
+        ).fetchall()
+        self.assertEqual(len(admins), 2)
+        for admin in admins:
+            self.assertEqual(admin["role"], "super_admin")
+            self.assertEqual(admin["is_active"], 1)
+            self.assertEqual(admin["is_protected"], 1)
+            self.assertEqual(admin["credentials_version"], 1)
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute(
+                "UPDATE users SET role='client', is_active=0 WHERE lower(email)=?",
+                ("daoudabangoura@trustdelivery.com",),
+            )
+        conn.rollback()
         conn.close()
-        self.assertIsNotNone(admin)
-        self.assertEqual(admin["role"], "super_admin")
-        self.assertEqual(admin["is_active"], 1)
 
-    def test_required_admin_can_log_in_with_documented_credentials(self):
+    def test_email_login_is_case_insensitive(self):
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO users (full_name, email, password_hash, role, is_active) VALUES (?,?,?,?,1)",
+            ("Login Test", "login-test@example.com", generate_password_hash("TestLogin#Secure2026"), "client"),
+        )
+        conn.commit()
+        conn.close()
         client = app.test_client()
         response = client.post(
             "/login",
             data={
-                "email": "ADMIN@TRUSTDELIVERY.COM",
-                "password": "TrustDelivery@2026",
+                "email": "LOGIN-TEST@EXAMPLE.COM",
+                "password": "TestLogin#Secure2026",
             },
             follow_redirects=False,
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn("/dashboard?", response.headers["Location"])
         self.assertIn("_tab=", response.headers["Location"])
+
+    def test_founder_admin_cannot_be_deleted_through_the_ui(self):
+        conn = get_db()
+        daouda = conn.execute(
+            "SELECT id FROM users WHERE lower(email)=?", ("daoudabangoura@trustdelivery.com",)
+        ).fetchone()
+        conn.close()
+        response = self.logged_client(self.admin_id).post(
+            f"/utilisateurs/{daouda['id']}/supprimer?_tab=test-tab",
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        conn = get_db()
+        still_active = conn.execute(
+            "SELECT is_active FROM users WHERE id=?", (daouda["id"],)
+        ).fetchone()
+        conn.close()
+        self.assertEqual(still_active["is_active"], 1)
+
+    def test_new_accounts_require_a_strong_password(self):
+        response = self.logged_client(self.admin_id).post(
+            "/utilisateurs/nouveau?_tab=test-tab",
+            data={
+                "full_name": "Weak Password",
+                "email": "weak-password@example.com",
+                "role": "client",
+                "password": "weak",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 200)
+        conn = get_db()
+        account = conn.execute(
+            "SELECT id FROM users WHERE email=?", ("weak-password@example.com",)
+        ).fetchone()
+        conn.close()
+        self.assertIsNone(account)
 
     def test_super_admin_can_download_database_backup(self):
         client = self.logged_client(self.admin_id)

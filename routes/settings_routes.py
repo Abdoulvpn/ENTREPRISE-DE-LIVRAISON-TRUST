@@ -5,7 +5,7 @@ from urllib.error import HTTPError, URLError
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
-from db import get_db, log_action, create_user_notification, backup_database
+from db import backup_database, create_user_notification, get_db, log_action, validate_password_strength
 from auth import roles_required, login_required
 from integrations import send_whatsapp_otp
 
@@ -98,11 +98,18 @@ def profile():
     conn = get_db()
     if request.method == "POST":
         full_name = request.form.get("full_name", "").strip()
+        if g.user["is_protected"]:
+            full_name = g.user["full_name"]
         phone = request.form.get("phone", "").strip()
         current_password = request.form.get("current_password", "")
         new_password = request.form.get("new_password", "")
 
         if new_password:
+            password_error = validate_password_strength(new_password)
+            if password_error:
+                flash(password_error, "danger")
+                conn.close()
+                return redirect(url_for("settings.profile"))
             if not check_password_hash(g.user["password_hash"], current_password):
                 flash("Mot de passe actuel incorrect.", "danger")
                 conn.close()

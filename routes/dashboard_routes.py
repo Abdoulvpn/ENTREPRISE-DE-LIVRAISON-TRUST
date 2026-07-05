@@ -176,7 +176,7 @@ def index():
     activities = conn.execute("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 12").fetchall()
     alerts_stock = conn.execute(
         "SELECT p.name, p.sku, s.quantity, s.alert_threshold FROM stock s JOIN products p ON p.id=s.product_id "
-        "WHERE s.quantity<=s.alert_threshold ORDER BY s.quantity"
+        "WHERE s.quantity<=s.alert_threshold AND p.is_archived=0 ORDER BY s.quantity"
     ).fetchall()
     options = {
         "managers": conn.execute("SELECT id, full_name FROM users WHERE role IN ('super_admin','moderateur') AND is_active=1 ORDER BY full_name").fetchall(),
@@ -187,7 +187,7 @@ def index():
         "couriers": conn.execute("SELECT id, full_name FROM users WHERE role='livreur' AND parent_courier_id IS NULL AND is_active=1 ORDER BY full_name").fetchall(),
         "sub_couriers": conn.execute("SELECT id, full_name FROM users WHERE role='livreur' AND parent_courier_id IS NOT NULL AND is_active=1 ORDER BY full_name").fetchall(),
         "zones": conn.execute("SELECT id, name FROM zones ORDER BY name").fetchall(),
-        "products": conn.execute("SELECT id, name FROM products ORDER BY name").fetchall(),
+        "products": conn.execute("SELECT id, name FROM products WHERE is_archived=0 ORDER BY name").fetchall(),
     }
     stats = {
         "total_orders": total, "delivered": counts["delivered"] or 0, "delivered_pct": pct(counts["delivered"]),

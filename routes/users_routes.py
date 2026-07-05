@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from werkzeug.security import generate_password_hash
-from db import get_db, log_action, ROLES
+from db import backup_database, get_db, log_action, ROLES, validate_password_strength
 from auth import roles_required
 
 bp = Blueprint("users", __name__, url_prefix="/utilisateurs")
@@ -44,10 +44,12 @@ def create_user():
             error = "Seul un Super Administrateur peut créer un autre Super Administrateur."
         elif role not in ROLES:
             error = "Rôle invalide."
+        else:
+            error = validate_password_strength(password)
 
         if error is None:
             conn = get_db()
-            existing = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+            existing = conn.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone()
             if existing:
                 error = "Cet email est déjà utilisé."
             else:
@@ -85,6 +87,10 @@ def edit_user(user_id):
         conn.close()
         flash("Vous n'avez pas le droit de modifier un Super Administrateur.", "danger")
         return redirect(url_for("users.list_users"))
+    if user["is_protected"]:
+        conn.close()
+        flash("Ce compte fondateur est protégé. Seul son propriétaire peut changer son mot de passe depuis son profil.", "warning")
+        return redirect(url_for("users.list_users"))
 
     if request.method == "POST":
         full_name = request.form.get("full_name", "").strip()
@@ -100,6 +106,11 @@ def edit_user(user_id):
 
         if role == "super_admin" and g.user["role"] != "super_admin":
             flash("Seul un Super Administrateur peut attribuer ce rôle.", "danger")
+            conn.close()
+            return redirect(url_for("users.edit_user", user_id=user_id))
+        password_error = validate_password_strength(new_password) if new_password else None
+        if password_error:
+            flash(password_error, "danger")
             conn.close()
             return redirect(url_for("users.edit_user", user_id=user_id))
 
@@ -134,9 +145,14 @@ def delete_user(user_id):
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
     if user:
-        conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        if user["is_protected"]:
+            conn.close()
+            flash("Ce compte fondateur ne peut être ni suspendu ni supprimé.", "danger")
+            return redirect(url_for("users.list_users"))
+        backup_database(force=True)
+        conn.execute("UPDATE users SET is_active=0 WHERE id=?", (user_id,))
         conn.commit()
-        log_action(g.user, "Suppression utilisateur", f"{user['full_name']} ({user['email']})")
+        log_action(g.user, "Désactivation utilisateur", f"{user['full_name']} ({user['email']})")
     conn.close()
-    flash("Le compte a été supprimé définitivement.", "info")
+    flash("Le compte a été désactivé et ses données ont été conservées.", "info")
     return redirect(url_for("users.list_users"))

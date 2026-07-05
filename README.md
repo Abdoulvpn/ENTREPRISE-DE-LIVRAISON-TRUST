@@ -70,19 +70,21 @@ dans l'APK. Le compte de service ne doit jamais être ajouté au dépôt Git.
 La base de données (`trustdelivery.db`) et les comptes de démonstration sont créés
 automatiquement au premier démarrage.
 
-## Compte Super Administrateur
+## Comptes Super Administrateurs protégés
 
-Un compte administrateur de secours est créé automatiquement, y compris lorsque
-la base de données existe déjà :
+Ces deux comptes fondateurs sont restaurés automatiquement comme Super Administrateurs
+actifs à chaque démarrage. Leur identité, leur rôle et leur statut ne peuvent pas être
+modifiés ou supprimés, même par une écriture SQL accidentelle :
 
-| Champ | Valeur |
+| Nom | Email |
 |---|---|
-| Email | `admin@trustdelivery.com` |
-| Mot de passe | `TrustDelivery@2026` |
+| Thierno Abdoul Keita | `thierno.keita@trustdelivery.com` |
+| Daouda Bangoura | `daoudabangoura@trustdelivery.com` |
 
-⚠️ **Changez ce mot de passe dès la première connexion** (menu "Mon profil").
+Les mots de passe initiaux ne sont pas enregistrés en clair dans le dépôt. Chaque
+propriétaire peut ensuite changer son propre mot de passe depuis **Mon profil**.
 
-## Comptes de démonstration (mot de passe : `Demo@2026`)
+## Comptes de démonstration locale (mot de passe : `Demo@2026`)
 
 | Rôle | Email |
 |---|---|
@@ -91,14 +93,13 @@ la base de données existe déjà :
 | Livreur | livreur@trustdelivery.com |
 | Client | client@trustdelivery.com |
 
-Vous pouvez supprimer ces comptes de test depuis le module **Utilisateurs** une fois
-en production.
+Ces comptes sont automatiquement désactivés sur un hébergement de production.
 
 ## Fonctionnalités couvertes (cahier des charges)
 
 - **Authentification & sécurité** : connexion par email/mot de passe, session sécurisée,
   mots de passe hashés (Werkzeug), journalisation des connexions.
-- **Gestion des utilisateurs** : création, modification, suspension, suppression ;
+- **Gestion des utilisateurs** : création, modification et suspension avec conservation des données ;
   5 rôles (Super Administrateur, Modérateur, Agent de confirmation, Livreur, Client).
 - **Tableau de bord** : taux de confirmation, taux de livraison réussie, taux de retour,
   chiffre d'affaires (graphique 7 jours), performance par zone, alertes de stock.
@@ -138,9 +139,9 @@ en production.
   `/var/data/trustdelivery.db`. Sur Railway, créez un volume monté sur `/data` puis
   définissez `DATABASE_PATH=/data/trustdelivery.db`. L'application refuse désormais
   de démarrer sur un disque éphémère afin d'éviter un redéploiement destructeur.
-- Une sauvegarde cohérente est créée automatiquement chaque jour dans le dossier
-  `backups` du volume (10 versions conservées). Le Super Administrateur peut aussi
-  télécharger une sauvegarde depuis **Paramètres**.
+- Des sauvegardes SQLite cohérentes sont créées automatiquement sur le volume :
+  72 horaires, 120 quotidiennes et 24 mensuelles. Les 30 derniers exports manuels
+  sont également conservés et téléchargeables depuis **Paramètres**.
 
 ## Configuration des boutiques et notifications
 

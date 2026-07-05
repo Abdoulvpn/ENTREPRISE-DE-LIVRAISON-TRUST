@@ -109,7 +109,7 @@ def create_order_record(
     order_items_data = []
     for pid, qty in items:
         product = conn.execute(
-            "SELECT * FROM products WHERE id=? AND supplier_client_id=? AND is_validated=1",
+            "SELECT * FROM products WHERE id=? AND supplier_client_id=? AND is_validated=1 AND is_archived=0",
             (pid, client_id),
         ).fetchone()
         if not product:
@@ -189,11 +189,11 @@ def create_order():
     conn = get_db()
     if g.user["role"] == "client":
         products = conn.execute(
-            "SELECT * FROM products WHERE is_validated=1 AND supplier_client_id=? ORDER BY name",
+            "SELECT * FROM products WHERE is_validated=1 AND is_archived=0 AND supplier_client_id=? ORDER BY name",
             (g.user["id"],),
         ).fetchall()
     else:
-        products = conn.execute("SELECT * FROM products WHERE is_validated=1 ORDER BY name").fetchall()
+        products = conn.execute("SELECT * FROM products WHERE is_validated=1 AND is_archived=0 ORDER BY name").fetchall()
     zones = conn.execute("SELECT * FROM zones ORDER BY name").fetchall()
     clients = []
     if g.user["role"] in ("super_admin", "moderateur", "agent_confirmation"):
@@ -228,7 +228,7 @@ def create_order():
             error = "Le client sélectionné est invalide ou inactif."
         if error is None:
             owned_count = conn.execute(
-                f"SELECT COUNT(*) c FROM products WHERE is_validated=1 AND supplier_client_id=? "
+                f"SELECT COUNT(*) c FROM products WHERE is_validated=1 AND is_archived=0 AND supplier_client_id=? "
                 f"AND id IN ({','.join('?' for _ in items)})",
                 [client_id, *[pid for pid, _qty in items]],
             ).fetchone()["c"]
@@ -331,7 +331,7 @@ def import_sheet():
 
             zone = conn.execute("SELECT id FROM zones WHERE lower(name)=lower(?)", (key[3],)).fetchone()
             product = conn.execute(
-                "SELECT id FROM products WHERE lower(sku)=lower(?) AND is_validated=1 AND supplier_client_id=?",
+                "SELECT id FROM products WHERE lower(sku)=lower(?) AND is_validated=1 AND is_archived=0 AND supplier_client_id=?",
                 (sku, client_id),
             ).fetchone()
             if not zone:

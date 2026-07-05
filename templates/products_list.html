@@ -47,7 +47,7 @@
           {% if current_user.role in ['super_admin','moderateur','client'] %}
             <a href="{{ url_for('products.edit_product', product_id=p.id) }}" class="td-btn-outline btn btn-sm" title="Modifier">✎</a>
             {% if current_user.role in ['super_admin','moderateur'] %}<a href="{{ url_for('products.stock_movements', product_id=p.id) }}" class="td-btn-outline btn btn-sm">Détail &amp; historique</a>
-            <form method="post" action="{{ url_for('products.delete_product', product_id=p.id) }}" class="d-inline" onsubmit="return confirm('Supprimer ce produit ?')"><button class="btn btn-sm btn-outline-danger">Supprimer</button></form>{% endif %}
+            <form method="post" action="{{ url_for('products.delete_product', product_id=p.id) }}" class="d-inline" onsubmit="return confirm('Archiver ce produit en conservant son historique ?')"><button class="btn btn-sm btn-outline-danger">Archiver</button></form>{% endif %}
           {% else %}
             <span class="td-muted">Lecture seule</span>
           {% endif %}

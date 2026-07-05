@@ -4,6 +4,7 @@ Application Flask développée à partir du cahier des charges fourni.
 Démarrage : python app.py  →  http://127.0.0.1:5000
 """
 import os
+from datetime import timedelta
 from flask import Flask, g, redirect, url_for
 
 import db as db_module
@@ -15,11 +16,27 @@ from routes import auth_routes, dashboard_routes, users_routes, products_routes,
 
 def create_app():
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "trustdelivery-dev-secret-change-me")
+    secret_key = os.environ.get("SECRET_KEY", "").strip()
+    if db_module.is_hosted_production() and len(secret_key) < 32:
+        raise RuntimeError("SECRET_KEY doit contenir au moins 32 caractères en production.")
+    app.config.update(
+        SECRET_KEY=secret_key or "trustdelivery-dev-secret-change-me",
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=db_module.is_hosted_production(),
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+    )
     # Les photos prises depuis l'application Android dépassent souvent 1 Mo.
     app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 
     db_module.init_db()
+
+    @app.before_request
+    def maintain_backups():
+        try:
+            db_module.maintain_database_backups()
+        except Exception:
+            app.logger.exception("Échec de la sauvegarde périodique de la base")
 
     app.before_request(load_logged_in_user)
 
@@ -86,10 +103,9 @@ if __name__ == "__main__":
     print("=" * 70)
     print(" TrustDelivery — Plateforme de Gestion de Livraison")
     print(" Application disponible sur : http://127.0.0.1:5000")
-    print(" Compte Super Administrateur :")
-    print("   Email    : admin@trustdelivery.com")
-    print("   Mot de passe : TrustDelivery@2026")
-    print(" (Changez ce mot de passe après la première connexion.)")
+    print(" Comptes fondateurs protégés :")
+    print("   thierno.keita@trustdelivery.com")
+    print("   daoudabangoura@trustdelivery.com")
     print("=" * 70)
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_ENV") != "production"

@@ -6,11 +6,21 @@ utilisateurs & rôles, produits & stocks, commandes, livraisons, facturation, au
 """
 import sqlite3
 import os
+import re
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def is_hosted_production():
+    return bool(
+        os.environ.get("RENDER")
+        or os.environ.get("RAILWAY_ENVIRONMENT")
+        or os.environ.get("RAILWAY_ENVIRONMENT_NAME")
+        or os.environ.get("REQUIRE_PERSISTENT_DATABASE") == "1"
+    )
 
 
 def resolve_database_path():
@@ -31,13 +41,7 @@ def resolve_database_path():
     if os.path.isdir("/data") and (os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("FLASK_ENV") == "production"):
         return "/data/trustdelivery.db"
 
-    is_hosted_production = bool(
-        os.environ.get("RENDER")
-        or os.environ.get("RAILWAY_ENVIRONMENT")
-        or os.environ.get("RAILWAY_ENVIRONMENT_NAME")
-        or os.environ.get("REQUIRE_PERSISTENT_DATABASE") == "1"
-    )
-    if is_hosted_production:
+    if is_hosted_production():
         raise RuntimeError(
             "Aucun volume persistant détecté. Configurez DATABASE_PATH vers le volume "
             "(ex. /var/data/trustdelivery.db ou /data/trustdelivery.db). Démarrage refusé "
@@ -66,20 +70,38 @@ ROLES = {
     "client": "Client",
 }
 
-# Compte administrateur demandé explicitement. Seul le hachage fort est versionné ;
-# le mot de passe temporaire doit être changé dès la première connexion.
+# Comptes fondateurs protégés. Les mots de passe initiaux ne sont jamais stockés en clair.
 REQUIRED_ADMIN_ACCOUNTS = (
     (
-        "Administrateur TrustDelivery",
-        "admin@trustdelivery.com",
-        "scrypt:32768:8:1$hFGGWigRFQ1v6YW6$1fb19aae80039abb3583894d609f0e10a9ae02eeb7a38b881512af30b05c93d1c51a0dbf88fa0d60519d27c3a33f7c3f1168d371c5a8245784c630ad9558ef99",
+        "Thierno Abdoul Keita",
+        "thierno.keita@trustdelivery.com",
+        "scrypt:32768:8:1$YpYE8HusCpqBmF5B$1bd24317beb908fc24b4481460f292d86eb5317a98d930bd21908bf13193153da2d91530e6cb9ccc78c2239d0393117a9c03f0b5d67fd0e316c354effdd3e0d5",
+        1,
     ),
     (
         "Daouda Bangoura",
         "daoudabangoura@trustdelivery.com",
-        "scrypt:32768:8:1$H61pz7oK40UAFzIf$0a3f3bfd35a3d5f9013d914efa7644e2258e28b4a9b207c2c4014dc9f023ad2d2a4ec4681d6f5a3546531ab75c340b75e7b33b40b4f3f89b110809a1cb13c3c4",
+        "scrypt:32768:8:1$Zzh6IgFv3Rq3H7j7$f1a802c32d169a5a1dd1b415a1e2a2139467f91fc5defd7f53f503aada1f7df622bda20c3b23fb8c2c3ced52da3ce55ef8f00fe508bfd8f65482ccea81fcabb1",
+        1,
     ),
 )
+
+INSECURE_DEFAULT_PASSWORDS = ("TrustDelivery@2026", "Demo@2026")
+
+
+def validate_password_strength(password):
+    if len(password or "") < 14:
+        return "Le mot de passe doit contenir au moins 14 caractères."
+    checks = (
+        (r"[a-z]", "une lettre minuscule"),
+        (r"[A-Z]", "une lettre majuscule"),
+        (r"\d", "un chiffre"),
+        (r"[^A-Za-z0-9]", "un caractère spécial"),
+    )
+    missing = [label for pattern, label in checks if not re.search(pattern, password)]
+    if missing:
+        return "Le mot de passe doit contenir " + ", ".join(missing) + "."
+    return None
 
 ORDER_STATUSES = [
     ("en_attente", "En attente de confirmation", "#f59e0b", 1),
@@ -104,24 +126,25 @@ def get_db():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 10000")
+    conn.execute("PRAGMA synchronous = FULL")
+    conn.execute("PRAGMA wal_autocheckpoint = 1000")
     return conn
 
 
-def backup_database(force=False):
-    """Crée une sauvegarde SQLite cohérente sur le même volume persistant."""
+BACKUP_RETENTION = {
+    "hourly": 72,
+    "daily": 120,
+    "monthly": 24,
+    "manual": 30,
+}
+
+
+def _create_database_backup(target):
     if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
         return None
-    backup_dir = os.path.join(os.path.dirname(DB_PATH), "backups")
-    os.makedirs(backup_dir, exist_ok=True)
-    date_key = datetime.now(timezone.utc).strftime("%Y%m%d")
-    if not force:
-        daily_path = os.path.join(backup_dir, f"trustdelivery-{date_key}.db")
-        if os.path.exists(daily_path):
-            return daily_path
-        target = daily_path
-    else:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
-        target = os.path.join(backup_dir, f"trustdelivery-{stamp}.db")
+    if os.path.exists(target):
+        return target
+    os.makedirs(os.path.dirname(target), exist_ok=True)
     temporary = f"{target}.{os.getpid()}.tmp"
     source = sqlite3.connect(DB_PATH, timeout=10)
     destination = sqlite3.connect(temporary)
@@ -136,22 +159,61 @@ def backup_database(force=False):
         if os.path.exists(temporary):
             os.remove(temporary)
         raise
+    return target
+
+
+def _prune_backups(backup_dir, keep):
+    if not os.path.isdir(backup_dir):
+        return
     backups = sorted(
         (os.path.join(backup_dir, name) for name in os.listdir(backup_dir) if name.endswith(".db")),
         key=os.path.getmtime,
         reverse=True,
     )
-    for old_backup in backups[10:]:
+    for old_backup in backups[keep:]:
         try:
             os.remove(old_backup)
         except OSError:
             pass
-    return target
+
+
+def maintain_database_backups(now=None):
+    """Conserve des générations horaires, quotidiennes et mensuelles."""
+    if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
+        return []
+    now = now or datetime.now(timezone.utc)
+    backup_root = os.path.join(os.path.dirname(DB_PATH), "backups")
+    generations = (
+        ("hourly", now.strftime("%Y%m%d-%H")),
+        ("daily", now.strftime("%Y%m%d")),
+        ("monthly", now.strftime("%Y%m")),
+    )
+    created = []
+    for generation, stamp in generations:
+        backup_dir = os.path.join(backup_root, generation)
+        target = os.path.join(backup_dir, f"trustdelivery-{stamp}.db")
+        created.append(_create_database_backup(target))
+        _prune_backups(backup_dir, BACKUP_RETENTION[generation])
+    return [path for path in created if path]
+
+
+def backup_database(force=False):
+    """Crée une sauvegarde manuelle ou renvoie la sauvegarde quotidienne."""
+    now = datetime.now(timezone.utc)
+    if not force:
+        backups = maintain_database_backups(now)
+        daily_dir = os.path.join(os.path.dirname(DB_PATH), "backups", "daily")
+        return os.path.join(daily_dir, f"trustdelivery-{now:%Y%m%d}.db") if backups else None
+    backup_dir = os.path.join(os.path.dirname(DB_PATH), "backups", "manual")
+    target = os.path.join(backup_dir, f"trustdelivery-{now:%Y%m%d-%H%M%S-%f}.db")
+    result = _create_database_backup(target)
+    _prune_backups(backup_dir, BACKUP_RETENTION["manual"])
+    return result
 
 
 def init_db(reset=False):
     if reset:
-        if os.environ.get("ALLOW_DATABASE_RESET") != "1":
+        if is_hosted_production() or os.environ.get("ALLOW_DATABASE_RESET") != "1":
             raise RuntimeError("Réinitialisation de la base bloquée par sécurité.")
         if os.path.exists(DB_PATH):
             backup_database(force=True)
@@ -159,7 +221,7 @@ def init_db(reset=False):
 
     is_new = not os.path.exists(DB_PATH)
     if not is_new:
-        backup_database()
+        maintain_database_backups()
     conn = get_db()
     integrity = conn.execute("PRAGMA quick_check").fetchone()[0]
     if integrity != "ok":
@@ -181,6 +243,8 @@ def init_db(reset=False):
             whatsapp_phone TEXT,
             zone TEXT,
             is_active INTEGER NOT NULL DEFAULT 1,
+            is_protected INTEGER NOT NULL DEFAULT 0,
+            credentials_version INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
@@ -216,6 +280,7 @@ def init_db(reset=False):
             supplier_client_id INTEGER REFERENCES users(id),
             price REAL NOT NULL DEFAULT 0,
             is_validated INTEGER NOT NULL DEFAULT 0,
+            is_archived INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
@@ -417,27 +482,79 @@ def init_db(reset=False):
         seed(conn)
 
     ensure_required_admins(conn)
+    disable_insecure_default_accounts(conn)
 
     conn.close()
 
 
 def ensure_required_admins(conn):
-    for full_name, email, password_hash in REQUIRED_ADMIN_ACCOUNTS:
-        existing = conn.execute("SELECT id FROM users WHERE lower(email)=lower(?)", (email,)).fetchone()
+    for full_name, email, password_hash, credentials_version in REQUIRED_ADMIN_ACCOUNTS:
+        existing = conn.execute(
+            "SELECT id, credentials_version FROM users WHERE lower(email)=lower(?)", (email,)
+        ).fetchone()
         if existing:
-            conn.execute("UPDATE users SET role='super_admin', is_active=1 WHERE id=?", (existing["id"],))
+            reset_credentials = existing["credentials_version"] < credentials_version
+            conn.execute(
+                "UPDATE users SET full_name=?, email=?, role='super_admin', is_active=1, is_protected=1, "
+                "password_hash=CASE WHEN ? THEN ? ELSE password_hash END, credentials_version=? WHERE id=?",
+                (full_name, email, reset_credentials, password_hash, credentials_version, existing["id"]),
+            )
         else:
             conn.execute(
-                "INSERT INTO users (full_name, email, password_hash, role, is_active) VALUES (?,?,?,'super_admin',1)",
-                (full_name, email, password_hash),
+                "INSERT INTO users (full_name, email, password_hash, role, is_active, is_protected, credentials_version) "
+                "VALUES (?,?,?,'super_admin',1,1,?)",
+                (full_name, email, password_hash, credentials_version),
             )
     conn.commit()
+
+
+def disable_insecure_default_accounts(conn):
+    if not is_hosted_production():
+        return
+    accounts = conn.execute(
+        "SELECT id, password_hash FROM users WHERE is_protected=0 AND is_active=1"
+    ).fetchall()
+    insecure_ids = [
+        account["id"]
+        for account in accounts
+        if any(check_password_hash(account["password_hash"], password) for password in INSECURE_DEFAULT_PASSWORDS)
+    ]
+    if insecure_ids:
+        conn.executemany("UPDATE users SET is_active=0 WHERE id=?", ((user_id,) for user_id in insecure_ids))
+        conn.commit()
 
 
 def ensure_schema(conn):
     user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     if "whatsapp_phone" not in user_columns:
         conn.execute("ALTER TABLE users ADD COLUMN whatsapp_phone TEXT")
+    if "is_protected" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN is_protected INTEGER NOT NULL DEFAULT 0")
+    if "credentials_version" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN credentials_version INTEGER NOT NULL DEFAULT 0")
+    conn.executescript(
+        """
+        CREATE TRIGGER IF NOT EXISTS protect_founder_admin_update
+        BEFORE UPDATE OF full_name, email, role, is_active, is_protected ON users
+        WHEN OLD.is_protected = 1 AND (
+            NEW.full_name IS NOT OLD.full_name
+            OR lower(NEW.email) IS NOT lower(OLD.email)
+            OR NEW.role IS NOT 'super_admin'
+            OR NEW.is_active IS NOT 1
+            OR NEW.is_protected IS NOT 1
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'Ce compte fondateur est protégé');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS protect_founder_admin_delete
+        BEFORE DELETE ON users
+        WHEN OLD.is_protected = 1
+        BEGIN
+            SELECT RAISE(ABORT, 'Ce compte fondateur est protégé');
+        END;
+        """
+    )
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(orders)").fetchall()}
     if "recipient_name" not in columns:
         conn.execute("ALTER TABLE orders ADD COLUMN recipient_name TEXT")
@@ -464,6 +581,8 @@ def ensure_schema(conn):
         conn.execute("ALTER TABLE products ADD COLUMN link TEXT")
     if "photo" not in product_columns:
         conn.execute("ALTER TABLE products ADD COLUMN photo TEXT")
+    if "is_archived" not in product_columns:
+        conn.execute("ALTER TABLE products ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0")
     stock_columns = {row["name"] for row in conn.execute("PRAGMA table_info(stock)").fetchall()}
     if "initial_quantity" not in stock_columns:
         conn.execute("ALTER TABLE stock ADD COLUMN initial_quantity INTEGER NOT NULL DEFAULT 0")
@@ -543,20 +662,6 @@ def seed(conn):
             (key, label, color, order),
         )
 
-    # --- Compte Super Administrateur : Thierno Abdoul Keita ---
-    cur.execute(
-        """INSERT INTO users (full_name, email, password_hash, role, phone, zone, is_active)
-           VALUES (?,?,?,?,?,?,1)""",
-        (
-            "Thierno Abdoul Keita",
-            "thierno.keita@trustdelivery.com",
-            generate_password_hash("TrustDelivery@2026"),
-            "super_admin",
-            "+224 600 00 00 01",
-            "Conakry",
-        ),
-    )
-
     # --- Comptes de démonstration (un par rôle, pour pouvoir tester l'app) ---
     demo_users = [
         ("Aïssatou Camara", "moderateur@trustdelivery.com", "moderateur", "+224 600 00 00 02", "Conakry"),
@@ -570,6 +675,9 @@ def seed(conn):
                VALUES (?,?,?,?,?,?,1)""",
             (full_name, email, generate_password_hash("Demo@2026"), role, phone, zone),
         )
+    demo_client_id = cur.execute(
+        "SELECT id FROM users WHERE email='client@trustdelivery.com'"
+    ).fetchone()["id"]
 
     # --- Entrepôt par défaut ---
     cur.execute("INSERT INTO warehouses (name, location) VALUES (?,?)", ("Entrepôt Central", "Conakry"))
@@ -593,7 +701,7 @@ def seed(conn):
         cur.execute(
             """INSERT INTO products (name, sku, description, category, supplier, supplier_client_id, price, is_validated)
                VALUES (?,?,?,?,?,?,?,1)""",
-            (name, sku, desc, cat, supplier, 5, price),
+            (name, sku, desc, cat, supplier, demo_client_id, price),
         )
         product_ids.append(cur.lastrowid)
 
@@ -608,7 +716,7 @@ def seed(conn):
         cur.execute(
             """INSERT INTO stock_movements (product_id, warehouse_id, movement_type, quantity, note, created_by, created_at)
                VALUES (?,?,?,?,?,?,?)""",
-            (pid, warehouse_id, "entree", qty, "Stock initial", 1, datetime.now().isoformat()),
+            (pid, warehouse_id, "entree", qty, "Stock initial", demo_client_id, datetime.now().isoformat()),
         )
 
     conn.commit()

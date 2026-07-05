@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, current_app
 from werkzeug.utils import secure_filename
-from db import get_db, log_action
+from db import backup_database, get_db, log_action
 from auth import roles_required, login_required
 
 bp = Blueprint("products", __name__, url_prefix="/produits")
@@ -40,7 +40,7 @@ def list_products():
         "FROM products p LEFT JOIN stock s ON s.product_id = p.id "
         "LEFT JOIN users u ON u.id=p.supplier_client_id "
     )
-    conditions, params = [], []
+    conditions, params = ["p.is_archived=0"], []
 
     if g.user["role"] == "client":
         conditions.append("p.supplier_client_id = ?")
@@ -281,20 +281,16 @@ def stock_movements(product_id):
 def delete_product(product_id):
     conn = get_db()
     product = conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone()
-    used = conn.execute("SELECT 1 FROM order_items WHERE product_id=? LIMIT 1", (product_id,)).fetchone()
     if not product:
         flash("Produit introuvable.", "danger")
-    elif used:
-        flash("Ce produit est lié à des commandes et ne peut pas être supprimé.", "danger")
+    elif product["is_archived"]:
+        flash("Ce produit est déjà archivé.", "info")
     else:
-        conn.execute("UPDATE shipments SET product_id=NULL WHERE product_id=?", (product_id,))
-        conn.execute("DELETE FROM courier_stock WHERE product_id=?", (product_id,))
-        conn.execute("DELETE FROM stock_movements WHERE product_id=?", (product_id,))
-        conn.execute("DELETE FROM stock WHERE product_id=?", (product_id,))
-        conn.execute("DELETE FROM products WHERE id=?", (product_id,))
+        backup_database(force=True)
+        conn.execute("UPDATE products SET is_archived=1, is_validated=0 WHERE id=?", (product_id,))
         conn.commit()
-        log_action(g.user, "Suppression produit", f"{product['name']} ({product['sku']})")
-        flash("Produit supprimé.", "success")
+        log_action(g.user, "Archivage produit", f"{product['name']} ({product['sku']})")
+        flash("Produit archivé; son stock et tout son historique sont conservés.", "success")
     conn.close()
     return redirect(url_for("products.list_products"))
 
