@@ -19,7 +19,9 @@ def with_tab_param(url, tab_id):
 
 
 @bp.route("/login", methods=["GET", "POST"])
-def login():
+def gh --version
+winget install --id GitHub.cli -e    # si gh absentgh auth login
+# choisissez GitHub.com → Login with a web browserlogin():
     if g.user is not None:
         return redirect(url_for("dashboard.index"))
 

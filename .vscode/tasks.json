@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Flask Server",
+			"type": "shell",
+			"command": "cd e:\\trustdelivery && python app.py",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Start Flask Server",
+			"type": "shell",
+			"command": "cd e:\\trustdelivery; python app.py",
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}
