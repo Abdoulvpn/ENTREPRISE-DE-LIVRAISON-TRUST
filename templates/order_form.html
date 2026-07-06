@@ -3,7 +3,7 @@
 {% block page_title %}Nouvelle commande{% endblock %}
 {% block content %}
 
-<div class="td-card" style="max-width:760px;">
+<div class="td-card" style="max-width:980px;">
   <form method="post">
     {% if clients %}
     <div class="mb-3">
@@ -42,39 +42,18 @@
     </div>
 
     <hr class="td-divider">
-    <p class="td-muted" style="font-size:13px;">Lien boutique (optionnel)</p>
-
-    <div class="row">
-      <div class="col-md-5 mb-3">
-        <label class="form-label">Plateforme</label>
-        <select name="shop_platform" class="form-select">
-          {% for value, label in shop_platforms.items() %}
-            <option value="{{ value }}">{{ label or 'Aucune boutique' }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-md-7 mb-3">
-        <label class="form-label">Nom de la boutique</label>
-        <input type="text" name="shop_name" class="form-control" placeholder="Ex: Boutique Shopify Kankan">
-      </div>
-    </div>
-
-    <div class="row">
-      <div class="col-md-5 mb-3">
-        <label class="form-label">Reference commande boutique</label>
-        <input type="text" name="shop_order_ref" class="form-control" placeholder="Ex: #1024">
-      </div>
-      <div class="col-md-7 mb-3">
-        <label class="form-label">Lien commande boutique</label>
-        <input type="url" name="shop_order_url" class="form-control" placeholder="https://...">
-      </div>
-    </div>
-
-    <hr class="td-divider">
     <p class="td-muted" style="font-size:13px;">Articles de la commande</p>
 
+    <div class="td-product-row-head" aria-hidden="true">
+      <span>Nom du produit</span><span>Prix du produit</span><span>Quantité</span><span>Total</span><span></span>
+    </div>
     <div id="items-container"></div>
     <button type="button" id="add-item" class="btn td-btn-outline btn-sm mb-3">+ Ajouter un article</button>
+
+    <div class="text-end mb-3">
+      <span class="td-muted">Total de la commande :</span>
+      <strong id="order-total">0 GNF</strong>
+    </div>
 
     <div>
       <button type="submit" class="btn td-btn-primary">Creer la commande</button>
@@ -86,10 +65,12 @@
 <template id="item-row-template">
   <div class="td-product-row-grid item-row">
     <select name="product_id" class="form-select" required>
-      <option value="">Produit</option>
-      {% for p in products %}<option value="{{ p.id }}" data-client-id="{{ p.supplier_client_id or '' }}">{{ p.name }} - {{ p.price | int }} GNF</option>{% endfor %}
+      <option value="">Nom du produit</option>
+      {% for p in products %}<option value="{{ p.id }}" data-client-id="{{ p.supplier_client_id or '' }}" data-price="{{ p.price }}">{{ p.name }}</option>{% endfor %}
     </select>
-    <input type="number" name="quantity" min="1" value="1" class="form-control" placeholder="Qte" required>
+    <input type="number" name="unit_price" min="0" step="0.01" class="form-control item-price" placeholder="Prix du produit" required>
+    <input type="number" name="quantity" min="1" value="1" class="form-control item-quantity" placeholder="Quantité" required>
+    <output class="form-control item-total">0 GNF</output>
     <button type="button" class="btn btn-sm btn-outline-danger remove-item">x</button>
   </div>
 </template>
@@ -101,6 +82,20 @@
   const container = document.getElementById('items-container');
   const template = document.getElementById('item-row-template');
   const clientSelect = document.getElementById('client-id');
+  const orderTotal = document.getElementById('order-total');
+  const money = new Intl.NumberFormat('fr-FR', {maximumFractionDigits: 2});
+
+  function updateTotals() {
+    let total = 0;
+    document.querySelectorAll('.item-row').forEach((row) => {
+      const price = Number(row.querySelector('.item-price').value) || 0;
+      const quantity = Number(row.querySelector('.item-quantity').value) || 0;
+      const lineTotal = price * quantity;
+      row.querySelector('.item-total').textContent = `${money.format(lineTotal)} GNF`;
+      total += lineTotal;
+    });
+    orderTotal.textContent = `${money.format(total)} GNF`;
+  }
 
   function filterProducts() {
     if (!clientSelect) return;
@@ -114,11 +109,23 @@
 
   function addRow() {
     const clone = template.content.cloneNode(true);
+    const row = clone.querySelector('.item-row');
+    const product = row.querySelector('select[name="product_id"]');
+    const price = row.querySelector('.item-price');
+    const quantity = row.querySelector('.item-quantity');
+    product.addEventListener('change', () => {
+      price.value = product.selectedOptions[0]?.dataset.price || '';
+      updateTotals();
+    });
+    price.addEventListener('input', updateTotals);
+    quantity.addEventListener('input', updateTotals);
     clone.querySelector('.remove-item').addEventListener('click', (e) => {
       e.target.closest('.item-row').remove();
+      updateTotals();
     });
     container.appendChild(clone);
     filterProducts();
+    updateTotals();
   }
 
   document.getElementById('add-item').addEventListener('click', addRow);

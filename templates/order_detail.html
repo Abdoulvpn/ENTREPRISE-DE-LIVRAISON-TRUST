@@ -11,7 +11,7 @@
       <div class="d-flex justify-content-between align-items-start mb-3">
         <div>
           <h5 class="mb-1">{{ order.order_number }}</h5>
-          <span id="live-status" class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','proposee':'#8b5cf6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[order.status] }}">{{ order.status }}</span>
+          <span id="live-status" class="td-badge" style="background:{{ {'en_attente':'#f59e0b','confirmee':'#3b82f6','proposee':'#8b5cf6','affectee':'#6366f1','en_livraison':'#0ea5e9','livree':'#16a34a','annulee':'#dc2626','retournee':'#ea580c'}[order.status] }}">{{ {'en_attente':'En attente','confirmee':'Confirmée','proposee':'Assignée – en attente d’acceptation','affectee':'Assignée','en_livraison':'En livraison','livree':'Livrée','annulee':'Annulée','retournee':'Retournée'}[order.status] }}</span>
         </div>
         <div class="text-end td-muted" style="font-size:13px;">
           Créée le {{ order.created_at | dt }}
@@ -45,13 +45,13 @@
       </div>
 
       <table class="td-table mb-0">
-        <thead><tr><th>Produit</th><th>Qté</th><th>Prix unitaire</th><th>Total</th></tr></thead>
+        <thead><tr><th>Nom du produit</th><th>Prix du produit</th><th>Quantité</th><th>Total</th></tr></thead>
         <tbody>
         {% for it in items %}
           <tr>
             <td>{{ it.product_name }} <span class="td-muted">({{ it.sku }})</span></td>
-            <td>{{ it.quantity }}</td>
             <td>{{ it.unit_price | money }}</td>
+            <td>{{ it.quantity }}</td>
             <td>{{ (it.unit_price * it.quantity) | money }}</td>
           </tr>
         {% endfor %}

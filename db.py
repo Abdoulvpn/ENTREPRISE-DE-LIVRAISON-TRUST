@@ -108,7 +108,7 @@ def validate_password_strength(password):
 ORDER_STATUSES = [
     ("en_attente", "En attente de confirmation", "#f59e0b", 1),
     ("confirmee", "Confirmée", "#3b82f6", 2),
-    ("proposee", "Proposée au livreur", "#8b5cf6", 3),
+    ("proposee", "Assignée – en attente d’acceptation", "#8b5cf6", 3),
     ("affectee", "Acceptée par le livreur", "#6366f1", 4),
     ("en_livraison", "En cours de livraison", "#0ea5e9", 5),
     ("expediee", "Expédiée", "#0284c7", 6),
@@ -668,6 +668,10 @@ def ensure_schema(conn):
             "INSERT OR IGNORE INTO order_status_config (status_key, label, color, sort_order) VALUES (?,?,?,?)",
             (key, label, color, order),
         )
+    conn.execute(
+        "UPDATE order_status_config SET label=? WHERE status_key='proposee'",
+        ("Assignée – en attente d’acceptation",),
+    )
     conn.commit()
 
 

@@ -37,9 +37,12 @@
       <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if request.endpoint=='dashboard.index' }}"><i class="bi bi-grid-1x2-fill"></i><span>Tableau de bord</span></a>
 
       {% if current_user.role in ['super_admin','moderateur','agent_confirmation'] %}
-      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}"><i class="bi bi-bag-check-fill"></i><span>Commandes</span></a>
+      <a href="{{ url_for('orders.confirmation_panel') }}" class="{{ 'active' if request.endpoint in ['orders.confirmation_panel','orders.create_order','orders.confirm_order'] }}"><i class="bi bi-telephone-check-fill"></i><span>Confirmation</span></a>
+      <a href="{{ url_for('orders.delivery_panel') }}" class="{{ 'active' if request.endpoint in ['orders.delivery_panel','orders.assign_livreur'] }}"><i class="bi bi-truck"></i><span>Livraison</span></a>
+      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint in ['orders.list_orders','orders.order_detail'] }}"><i class="bi bi-bag-check-fill"></i><span>Toutes les commandes</span></a>
       {% elif current_user.role == 'client' %}
-      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}"><i class="bi bi-bag-check-fill"></i><span>Mes commandes</span></a>
+      <a href="{{ url_for('orders.confirmation_panel') }}" class="{{ 'active' if request.endpoint in ['orders.confirmation_panel','orders.create_order'] }}"><i class="bi bi-plus-circle-fill"></i><span>Nouvelle commande</span></a>
+      <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint in ['orders.list_orders','orders.order_detail'] }}"><i class="bi bi-bag-check-fill"></i><span>Mes commandes</span></a>
       {% elif current_user.role == 'livreur' %}
       <a href="{{ url_for('orders.list_orders') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('orders.') }}"><i class="bi bi-truck"></i><span>Mes livraisons</span></a>
       {% endif %}

@@ -1,5 +1,6 @@
 import csv
 import io
+import math
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify
 from datetime import datetime
 from db import get_db, log_action, create_user_notification
@@ -107,15 +108,19 @@ def create_order_record(
 ):
     total_amount = 0
     order_items_data = []
-    for pid, qty in items:
+    for item in items:
+        pid, qty = item[:2]
         product = conn.execute(
             "SELECT * FROM products WHERE id=? AND supplier_client_id=? AND is_validated=1 AND is_archived=0",
             (pid, client_id),
         ).fetchone()
         if not product:
             raise ValueError("Un article sélectionné n'appartient pas au stock de ce client.")
-        total_amount += product["price"] * qty
-        order_items_data.append((pid, qty, product["price"]))
+        unit_price = float(item[2]) if len(item) > 2 else float(product["price"])
+        if not math.isfinite(unit_price) or unit_price < 0:
+            raise ValueError("Le prix du produit doit être un nombre positif ou nul.")
+        total_amount += unit_price * qty
+        order_items_data.append((pid, qty, unit_price))
 
     order_number = generate_order_number(conn)
     cur = conn.execute(
@@ -183,6 +188,46 @@ def list_orders():
     return render_template("orders_list.html", orders=orders, statuses=statuses, status_filter=status_filter)
 
 
+@bp.route("/confirmation")
+@roles_required("super_admin", "moderateur", "agent_confirmation", "client")
+def confirmation_panel():
+    conn = get_db()
+    params = []
+    where = "WHERE o.status='en_attente'"
+    if g.user["role"] == "client":
+        where += " AND o.client_id=?"
+        params.append(g.user["id"])
+    orders = conn.execute(
+        "SELECT o.*, u.full_name client_name, z.name zone_name "
+        "FROM orders o JOIN users u ON u.id=o.client_id "
+        "LEFT JOIN zones z ON z.id=o.zone_id " + where + " ORDER BY o.created_at ASC",
+        params,
+    ).fetchall()
+    conn.close()
+    return render_template("orders_confirmation.html", orders=orders)
+
+
+@bp.route("/livraison")
+@roles_required("super_admin", "moderateur", "agent_confirmation")
+def delivery_panel():
+    conn = get_db()
+    orders = conn.execute(
+        "SELECT o.*, u.full_name client_name, z.name zone_name "
+        "FROM orders o JOIN users u ON u.id=o.client_id "
+        "LEFT JOIN zones z ON z.id=o.zone_id "
+        "WHERE o.status='confirmee' ORDER BY o.confirmed_at ASC, o.created_at ASC"
+    ).fetchall()
+    livreurs = conn.execute(
+        "SELECT u.*, COUNT(o.id) active_orders FROM users u "
+        "LEFT JOIN orders o ON o.livreur_id=u.id "
+        "AND o.status IN ('proposee','affectee','en_livraison') "
+        "WHERE u.role='livreur' AND u.is_active=1 "
+        "GROUP BY u.id ORDER BY active_orders ASC, u.full_name ASC"
+    ).fetchall()
+    conn.close()
+    return render_template("orders_delivery.html", orders=orders, livreurs=livreurs)
+
+
 @bp.route("/nouvelle", methods=["GET", "POST"])
 @roles_required("super_admin", "moderateur", "agent_confirmation", "client")
 def create_order():
@@ -211,15 +256,32 @@ def create_order():
         shop_order_url = request.form.get("shop_order_url", "").strip()
         product_ids = request.form.getlist("product_id")
         quantities = request.form.getlist("quantity")
+        unit_prices = request.form.getlist("unit_price")
 
         items = []
-        for pid, qty in zip(product_ids, quantities):
-            if pid and qty and int(qty) > 0:
-                items.append((int(pid), int(qty)))
+        invalid_item = False
+        submitted_prices = bool(unit_prices)
+        prices = unit_prices if submitted_prices else [None] * len(product_ids)
+        for pid, qty, unit_price in zip(product_ids, quantities, prices):
+            try:
+                parsed_quantity = int(qty)
+                parsed_price = float(unit_price) if unit_price is not None else None
+                if not pid or parsed_quantity <= 0 or (
+                    parsed_price is not None and (parsed_price < 0 or not math.isfinite(parsed_price))
+                ):
+                    raise ValueError
+                items.append(
+                    (int(pid), parsed_quantity, parsed_price)
+                    if parsed_price is not None else (int(pid), parsed_quantity)
+                )
+            except (TypeError, ValueError):
+                invalid_item = True
 
         error = None
+        if invalid_item or (submitted_prices and len(product_ids) != len(unit_prices)):
+            error = "Chaque article doit avoir un produit, un prix valide et une quantité positive."
         if not client_id or not zone_id or not recipient_name or not recipient_phone or not address or not items:
-            error = "Veuillez renseigner le client, le destinataire, son telephone, la zone, l'adresse et au moins un article."
+            error = error or "Veuillez renseigner le client, le destinataire, son telephone, la zone, l'adresse et au moins un article."
 
         client = conn.execute(
             "SELECT id FROM users WHERE id=? AND role='client' AND is_active=1", (client_id,)
@@ -230,9 +292,9 @@ def create_order():
             owned_count = conn.execute(
                 f"SELECT COUNT(*) c FROM products WHERE is_validated=1 AND is_archived=0 AND supplier_client_id=? "
                 f"AND id IN ({','.join('?' for _ in items)})",
-                [client_id, *[pid for pid, _qty in items]],
+                [client_id, *[item[0] for item in items]],
             ).fetchone()["c"]
-            if owned_count != len({pid for pid, _qty in items}):
+            if owned_count != len({item[0] for item in items}):
                 error = "Tous les articles doivent appartenir au stock du client sélectionné."
 
         if error is None:

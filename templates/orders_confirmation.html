@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Confirmation - TrustDelivery{% endblock %}
+{% block page_title %}Confirmation{% endblock %}
+{% block content %}
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="td-card h-100">
+      <h5>Créer une nouvelle commande</h5>
+      <p class="td-muted">Renseignez séparément le client, le produit, son prix, la quantité et l’adresse de livraison.</p>
+      <a href="{{ url_for('orders.create_order') }}" class="btn td-btn-accent">+ Nouvelle commande</a>
+      <a href="{{ url_for('orders.import_sheet') }}" class="btn td-btn-outline ms-2">Importer un sheet</a>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="td-card h-100">
+      <p class="td-muted mb-1">À confirmer</p>
+      <div style="font-size:32px;font-weight:800;">{{ orders | length }}</div>
+      <p class="td-muted mb-0">Après confirmation, la commande apparaît automatiquement dans Livraison.</p>
+    </div>
+  </div>
+</div>
+
+<div class="td-section-title"><span>Commandes en attente de confirmation</span></div>
+<div class="td-table-wrap">
+  <table class="td-table">
+    <thead><tr><th>N°</th>{% if current_user.role != 'client' %}<th>Client</th>{% endif %}<th>Destinataire</th><th>Zone</th><th>Montant</th><th>Date</th><th></th></tr></thead>
+    <tbody>
+    {% for o in orders %}
+      <tr>
+        <td>{{ o.order_number }}</td>
+        {% if current_user.role != 'client' %}<td>{{ o.client_name }}</td>{% endif %}
+        <td>{{ o.recipient_name }}</td><td>{{ o.zone_name or '-' }}</td>
+        <td>{{ o.total_amount | money }}</td><td class="td-muted">{{ o.created_at | dt }}</td>
+        <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="btn td-btn-primary btn-sm">Vérifier et confirmer</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="td-empty">Aucune commande en attente.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

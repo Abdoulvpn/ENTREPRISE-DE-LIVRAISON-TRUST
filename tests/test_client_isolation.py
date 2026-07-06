@@ -306,6 +306,71 @@ class ClientIsolationTests(unittest.TestCase):
         conn.close()
         self.assertEqual(tuple(order), ("", "", "", ""))
 
+    def test_manual_order_keeps_separate_price_and_calculates_total(self):
+        client = self.logged_client(self.first_client_id)
+        response = client.post(
+            "/commandes/nouvelle?_tab=test-tab",
+            data={
+                "zone_id": self.zone_id,
+                "recipient_name": "Client Prix Séparé",
+                "recipient_phone": "620000010",
+                "delivery_address": "Ratoma",
+                "product_id": [self.first_product_id],
+                "unit_price": [12500],
+                "quantity": [3],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        conn = get_db()
+        row = conn.execute(
+            "SELECT o.id, o.total_amount, oi.unit_price, oi.quantity "
+            "FROM orders o JOIN order_items oi ON oi.order_id=o.id "
+            "WHERE o.recipient_name='Client Prix Séparé'"
+        ).fetchone()
+        conn.close()
+        self.assertEqual(row["unit_price"], 12500)
+        self.assertEqual(row["quantity"], 3)
+        self.assertEqual(row["total_amount"], 37500)
+        detail = client.get(f"/commandes/{row['id']}?_tab=test-tab")
+        self.assertIn("Prix du produit".encode(), detail.data)
+        self.assertIn("Quantité".encode(), detail.data)
+
+    def test_confirmed_order_moves_from_confirmation_to_delivery_panel(self):
+        client = self.logged_client(self.first_client_id)
+        created = client.post(
+            "/commandes/nouvelle?_tab=test-tab",
+            data={
+                "zone_id": self.zone_id,
+                "recipient_name": "Flux Confirmation Livraison",
+                "recipient_phone": "620000011",
+                "delivery_address": "Dixinn",
+                "product_id": [self.first_product_id],
+                "unit_price": [10000],
+                "quantity": [1],
+            },
+        )
+        order_id = int(created.headers["Location"].rstrip("/").split("/")[-1].split("?")[0])
+        admin = self.logged_client(self.admin_id)
+        marker = "Flux Confirmation Livraison".encode()
+        self.assertIn(marker, admin.get("/commandes/confirmation?_tab=test-tab").data)
+        self.assertNotIn(marker, admin.get("/commandes/livraison?_tab=test-tab").data)
+        confirmed = admin.post(f"/commandes/{order_id}/confirmer?_tab=test-tab")
+        self.assertEqual(confirmed.status_code, 302)
+        self.assertNotIn(marker, admin.get("/commandes/confirmation?_tab=test-tab").data)
+        self.assertIn(marker, admin.get("/commandes/livraison?_tab=test-tab").data)
+
+        with patch("routes.orders_routes.send_courier_notification", return_value=(True, "envoyée", "")):
+            assigned = admin.post(
+                f"/commandes/{order_id}/affecter?_tab=test-tab",
+                data={"livreur_id": self.courier_id},
+            )
+        self.assertEqual(assigned.status_code, 302)
+        self.assertNotIn(marker, admin.get("/commandes/livraison?_tab=test-tab").data)
+        conn = get_db()
+        status = conn.execute("SELECT status FROM orders WHERE id=?", (order_id,)).fetchone()["status"]
+        conn.close()
+        self.assertEqual(status, "proposee")
+
     def test_store_webhook_creates_order_once(self):
         client = app.test_client()
         payload = {

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Livraison - TrustDelivery{% endblock %}
+{% block page_title %}Livraison{% endblock %}
+{% block content %}
+
+<div class="td-card mb-4">
+  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div><h5 class="mb-1">Commandes prêtes à livrer</h5><p class="td-muted mb-0">Seules les commandes confirmées sont affichées ici. Choisissez un livreur disponible pour chacune.</p></div>
+    <span class="td-badge" style="background:#3b82f6;">{{ orders | length }} à assigner</span>
+  </div>
+</div>
+
+<div class="td-table-wrap">
+  <table class="td-table">
+    <thead><tr><th>N°</th><th>Client</th><th>Destinataire</th><th>Zone</th><th>Montant</th><th>Livreur disponible</th><th></th></tr></thead>
+    <tbody>
+    {% for o in orders %}
+      <tr>
+        <td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}">{{ o.order_number }}</a></td>
+        <td>{{ o.client_name }}</td><td>{{ o.recipient_name }}</td><td>{{ o.zone_name or '-' }}</td><td>{{ o.total_amount | money }}</td>
+        <td colspan="2">
+          <form method="post" action="{{ url_for('orders.assign_livreur', order_id=o.id) }}" class="d-flex gap-2 flex-wrap">
+            <select name="livreur_id" class="form-select" style="min-width:220px;flex:1;" required>
+              <option value="">Choisir un livreur</option>
+              {% for l in livreurs %}<option value="{{ l.id }}">{{ l.full_name }} · {{ l.active_orders }} livraison(s) active(s)</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn td-btn-accent btn-sm">Assigner</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="td-empty">Aucune commande confirmée à assigner.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
