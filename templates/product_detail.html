@@ -43,7 +43,6 @@
         <div><span>Référence</span><strong>{{ product.sku }}</strong></div>
         <div><span>Catégorie</span><strong>{{ product.category or 'Non renseignée' }}</strong></div>
         <div><span>Fournisseur</span><strong>{{ product.supplier or product.supplier_client_name or 'Non renseigné' }}</strong></div>
-        <div><span>Prix d’achat</span><strong>{{ purchase_price | money if purchase_price is not none else 'Non renseigné' }}</strong></div>
         <div><span>Prix de vente</span><strong>{{ product.price | money }}</strong></div>
         <div><span>Date d’ajout</span><strong>{{ product.created_at | dt }}</strong></div>
         <div><span>Dernière modification</span><strong>{{ last_modified | dt }}</strong></div>

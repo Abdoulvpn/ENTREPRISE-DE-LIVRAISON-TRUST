@@ -6,7 +6,6 @@ utilisateurs & rôles, produits & stocks, commandes, livraisons, facturation, au
 """
 import sqlite3
 import os
-import re
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -92,17 +91,8 @@ INSECURE_DEFAULT_PASSWORDS = ("TrustDelivery@2026", "Demo@2026")
 
 
 def validate_password_strength(password):
-    if len(password or "") < 14:
-        return "Le mot de passe doit contenir au moins 14 caractères."
-    checks = (
-        (r"[a-z]", "une lettre minuscule"),
-        (r"[A-Z]", "une lettre majuscule"),
-        (r"\d", "un chiffre"),
-        (r"[^A-Za-z0-9]", "un caractère spécial"),
-    )
-    missing = [label for pattern, label in checks if not re.search(pattern, password)]
-    if missing:
-        return "Le mot de passe doit contenir " + ", ".join(missing) + "."
+    if len(password or "") < 6:
+        return "Le mot de passe doit contenir au moins 6 caractères."
     return None
 
 ORDER_STATUSES = [
@@ -123,13 +113,13 @@ ORDER_STATUSES = [
 ]
 
 DEMO_PRODUCTS = (
-    ("Écouteurs Bluetooth NovaPods", "EL-NP200", "Écouteurs sans fil avec boîtier de charge USB-C et autonomie de 24 heures.", "Électronique", "NovaTech Guinée", 145000, 210000, 34, 8),
-    ("Sac à dos urbain Kalo", "MOD-KL45", "Sac imperméable de 25 litres avec compartiment renforcé pour ordinateur 15 pouces.", "Mode & accessoires", "Atelier Kalo", 120000, 185000, 22, 5),
-    ("Coffret soins Karité Nimba", "BEA-KN03", "Coffret composé d'un lait corporel, d'un savon doux et d'un beurre de karité naturel.", "Beauté & bien-être", "Nimba Cosmétique", 85000, 135000, 41, 10),
-    ("Lampe solaire Sira 800", "ENE-SR800", "Lampe rechargeable avec panneau solaire, trois intensités et port USB de secours.", "Énergie solaire", "Sira Énergie", 175000, 260000, 17, 4),
-    ("Thermos inox Fouta 1L", "MAI-FT10", "Bouteille isotherme en acier inoxydable conservant les boissons chaudes ou froides.", "Maison & cuisine", "Fouta Distribution", 95000, 150000, 29, 6),
-    ("Jeu éducatif Alphabet Junior", "ENF-AJ01", "Cartes illustrées lavables pour l'apprentissage du français dès quatre ans.", "Enfants & éducation", "Éditions Djoliba", 45000, 75000, 53, 12),
-    ("Support téléphone moto SafeRide", "AUT-SR12", "Support antichoc réglable avec fixation renforcée pour guidon de moto.", "Auto & moto", "SafeRide Conakry", 70000, 110000, 26, 6),
+    ("Écouteurs Bluetooth NovaPods", "EL-NP200", "Écouteurs sans fil avec boîtier de charge USB-C et autonomie de 24 heures.", "Électronique", "NovaTech Guinée", 210000, 34, 8),
+    ("Sac à dos urbain Kalo", "MOD-KL45", "Sac imperméable de 25 litres avec compartiment renforcé pour ordinateur 15 pouces.", "Mode & accessoires", "Atelier Kalo", 185000, 22, 5),
+    ("Coffret soins Karité Nimba", "BEA-KN03", "Coffret composé d'un lait corporel, d'un savon doux et d'un beurre de karité naturel.", "Beauté & bien-être", "Nimba Cosmétique", 135000, 41, 10),
+    ("Lampe solaire Sira 800", "ENE-SR800", "Lampe rechargeable avec panneau solaire, trois intensités et port USB de secours.", "Énergie solaire", "Sira Énergie", 260000, 17, 4),
+    ("Thermos inox Fouta 1L", "MAI-FT10", "Bouteille isotherme en acier inoxydable conservant les boissons chaudes ou froides.", "Maison & cuisine", "Fouta Distribution", 150000, 29, 6),
+    ("Jeu éducatif Alphabet Junior", "ENF-AJ01", "Cartes illustrées lavables pour l'apprentissage du français dès quatre ans.", "Enfants & éducation", "Éditions Djoliba", 75000, 53, 12),
+    ("Support téléphone moto SafeRide", "AUT-SR12", "Support antichoc réglable avec fixation renforcée pour guidon de moto.", "Auto & moto", "SafeRide Conakry", 110000, 26, 6),
 )
 
 
@@ -598,7 +588,7 @@ def replace_legacy_demo_products(conn):
         return
 
     for row, product in zip(legacy, DEMO_PRODUCTS[:len(legacy)]):
-        name, sku, desc, category, supplier, purchase_price, sale_price, qty, threshold = product
+        name, sku, desc, category, supplier, sale_price, qty, threshold = product
         conn.execute(
             "UPDATE products SET name=?, sku=?, description=?, category=?, supplier=?, supplier_client_id=?, "
             "price=?, is_validated=1, is_archived=0 WHERE id=?",
@@ -609,7 +599,7 @@ def replace_legacy_demo_products(conn):
         conn.execute(
             "INSERT INTO stock (product_id, warehouse_id, quantity, initial_quantity, alert_threshold, note, visible_seller, is_validated) "
             "VALUES (?,?,?,?,?,?,1,1)",
-            (row["id"], warehouse["id"], qty, qty, threshold, f"Prix d'achat: {purchase_price} GNF | Lot de démonstration contrôlé"),
+            (row["id"], warehouse["id"], qty, qty, threshold, "Lot de démonstration contrôlé"),
         )
         conn.execute(
             "INSERT INTO stock_movements (product_id, warehouse_id, movement_type, quantity, note, created_by) "
@@ -618,7 +608,7 @@ def replace_legacy_demo_products(conn):
         )
 
     for product in DEMO_PRODUCTS[len(legacy):]:
-        name, sku, desc, category, supplier, purchase_price, sale_price, qty, threshold = product
+        name, sku, desc, category, supplier, sale_price, qty, threshold = product
         product_id = conn.execute(
             "INSERT INTO products (name, sku, description, category, supplier, supplier_client_id, price, is_validated) "
             "VALUES (?,?,?,?,?,?,?,1)",
@@ -627,7 +617,7 @@ def replace_legacy_demo_products(conn):
         conn.execute(
             "INSERT INTO stock (product_id, warehouse_id, quantity, initial_quantity, alert_threshold, note, visible_seller, is_validated) "
             "VALUES (?,?,?,?,?,?,1,1)",
-            (product_id, warehouse["id"], qty, qty, threshold, f"Prix d'achat: {purchase_price} GNF | Lot de démonstration contrôlé"),
+            (product_id, warehouse["id"], qty, qty, threshold, "Lot de démonstration contrôlé"),
         )
         conn.execute(
             "INSERT INTO stock_movements (product_id, warehouse_id, movement_type, quantity, note, created_by) "
@@ -745,6 +735,14 @@ def ensure_schema(conn):
         ("Assignée – en attente d’acceptation",),
     )
     replace_legacy_demo_products(conn)
+    demo_skus = tuple(product[1] for product in DEMO_PRODUCTS)
+    demo_placeholders = ",".join("?" for _ in demo_skus)
+    conn.execute(
+        f"UPDATE stock SET note='Lot de démonstration contrôlé' "
+        f"WHERE product_id IN (SELECT id FROM products WHERE sku IN ({demo_placeholders})) "
+        "AND note LIKE 'Prix d''achat:%'",
+        demo_skus,
+    )
     conn.commit()
 
 
@@ -785,7 +783,7 @@ def seed(conn):
         cur.execute("INSERT INTO zones (name, region, delivery_fee) VALUES (?,?,?)", (name, region, fee))
 
     # --- Produits de démonstration ---
-    for name, sku, desc, cat, supplier, purchase_price, sale_price, qty, threshold in DEMO_PRODUCTS:
+    for name, sku, desc, cat, supplier, sale_price, qty, threshold in DEMO_PRODUCTS:
         cur.execute(
             """INSERT INTO products (name, sku, description, category, supplier, supplier_client_id, price, is_validated)
                VALUES (?,?,?,?,?,?,?,1)""",
@@ -794,7 +792,7 @@ def seed(conn):
         pid = cur.lastrowid
         cur.execute(
             "INSERT INTO stock (product_id, warehouse_id, quantity, initial_quantity, alert_threshold, note, visible_seller, is_validated) VALUES (?,?,?,?,?,?,1,1)",
-            (pid, warehouse_id, qty, qty, threshold, f"Prix d'achat: {purchase_price} GNF | Lot de démonstration contrôlé"),
+            (pid, warehouse_id, qty, qty, threshold, "Lot de démonstration contrôlé"),
         )
         cur.execute(
             """INSERT INTO stock_movements (product_id, warehouse_id, movement_type, quantity, note, created_by, created_at)

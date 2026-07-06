@@ -1,5 +1,4 @@
 import os
-import re
 from datetime import date
 from uuid import uuid4
 
@@ -112,13 +111,9 @@ def product_detail(product_id):
         (product_id, f"Produit #{product_id} mis à jour"),
     ).fetchone()
     conn.close()
-    purchase_price = None
-    match = re.search(r"prix d'achat\s*:\s*([0-9 ]+)", product["stock_note"] or "", re.IGNORECASE)
-    if match:
-        purchase_price = float(match.group(1).replace(" ", ""))
     return render_template(
         "product_detail.html", product=product, stock_levels=stock_levels,
-        movements=movements, purchase_price=purchase_price,
+        movements=movements,
         last_modified=last_activity["updated_at"] or product["created_at"],
     )
 

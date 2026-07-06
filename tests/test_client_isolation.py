@@ -172,7 +172,7 @@ class ClientIsolationTests(unittest.TestCase):
         self.assertEqual(demo["price"], 210000)
         self.assertEqual(demo["quantity"], 34)
         self.assertEqual(demo["alert_threshold"], 8)
-        self.assertIn("Prix d'achat", demo["note"])
+        self.assertNotIn("Prix d'achat", demo["note"])
 
     def test_product_detail_shows_stock_history_and_actions(self):
         conn = get_db()
@@ -180,7 +180,8 @@ class ClientIsolationTests(unittest.TestCase):
         conn.close()
         response = self.logged_client(self.admin_id).get(f"/produits/{product_id}?_tab=test-tab")
         self.assertEqual(response.status_code, 200)
-        for label in ("Prix d’achat", "Prix de vente", "Seuil d’alerte", "Historique des mouvements", "Ajouter du stock"):
+        self.assertNotIn("Prix d’achat".encode(), response.data)
+        for label in ("Prix de vente", "Seuil d’alerte", "Historique des mouvements", "Ajouter du stock"):
             self.assertIn(label.encode(), response.data)
 
     def test_global_zoom_controls_are_available(self):
@@ -274,14 +275,14 @@ class ClientIsolationTests(unittest.TestCase):
         conn.close()
         self.assertEqual(still_active["is_active"], 1)
 
-    def test_new_accounts_require_a_strong_password(self):
+    def test_new_accounts_accept_a_six_character_password(self):
         response = self.logged_client(self.admin_id).post(
             "/utilisateurs/nouveau?_tab=test-tab",
             data={
                 "full_name": "Weak Password",
                 "email": "weak-password@example.com",
                 "role": "client",
-                "password": "weak",
+                "password": "abcde",
             },
             follow_redirects=False,
         )
@@ -292,6 +293,25 @@ class ClientIsolationTests(unittest.TestCase):
         ).fetchone()
         conn.close()
         self.assertIsNone(account)
+
+        accepted = self.logged_client(self.admin_id).post(
+            "/utilisateurs/nouveau?_tab=test-tab",
+            data={
+                "full_name": "Six Character Password",
+                "email": "six-password@example.com",
+                "role": "client",
+                "password": "abcdef",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(accepted.status_code, 302)
+        conn = get_db()
+        account = conn.execute(
+            "SELECT password_hash FROM users WHERE email=?", ("six-password@example.com",)
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(account)
+        self.assertTrue(check_password_hash(account["password_hash"], "abcdef"))
 
     def test_super_admin_can_download_database_backup(self):
         client = self.logged_client(self.admin_id)

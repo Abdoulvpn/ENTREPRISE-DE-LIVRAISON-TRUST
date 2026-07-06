@@ -42,7 +42,7 @@
     </div>
     <div class="mb-3">
       <label class="form-label">{{ 'Nouveau mot de passe (laisser vide pour ne pas changer)' if user else 'Mot de passe' }}</label>
-      <input type="password" name="password" class="form-control" {{ 'required' if not user }} placeholder="••••••••">
+      <input type="password" name="password" class="form-control" minlength="6" {{ 'required' if not user }} placeholder="6 caractères minimum">
     </div>
     {% if user %}
     <div class="mb-3 form-check">

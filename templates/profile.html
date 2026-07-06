@@ -13,7 +13,7 @@
         </div>
         <div class="mb-3"><label class="form-label">Téléphone</label><input type="text" name="phone" class="form-control" value="{{ current_user.phone or '' }}"></div>
         <hr class="td-divider"><p class="td-muted" style="font-size:13px">Laissez ces champs vides pour conserver votre mot de passe.</p>
-        <div class="row"><div class="col-md-6 mb-3"><label class="form-label">Mot de passe actuel</label><input type="password" name="current_password" class="form-control" autocomplete="current-password"></div><div class="col-md-6 mb-3"><label class="form-label">Nouveau mot de passe</label><input type="password" name="new_password" class="form-control" autocomplete="new-password"></div></div>
+        <div class="row"><div class="col-md-6 mb-3"><label class="form-label">Mot de passe actuel</label><input type="password" name="current_password" class="form-control" autocomplete="current-password"></div><div class="col-md-6 mb-3"><label class="form-label">Nouveau mot de passe</label><input type="password" name="new_password" class="form-control" minlength="6" autocomplete="new-password" placeholder="6 caractères minimum"></div></div>
         <button type="submit" class="btn td-btn-primary">Enregistrer le profil</button>
       </form>
     </div>
