@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import date
 from uuid import uuid4
 
@@ -65,6 +66,60 @@ def list_products():
     conn.close()
     return render_template(
         "products_list.html", products=products, search=search, clients=clients, client_filter=client_filter
+    )
+
+
+@bp.route("/<int:product_id>")
+@login_required
+def product_detail(product_id):
+    conn = get_db()
+    params = [product_id]
+    ownership = ""
+    if g.user["role"] == "client":
+        ownership = " AND p.supplier_client_id=?"
+        params.append(g.user["id"])
+    product = conn.execute(
+        "SELECT p.*, u.full_name supplier_client_name, "
+        "COALESCE((SELECT SUM(s.quantity) FROM stock s WHERE s.product_id=p.id),0) total_stock, "
+        "COALESCE((SELECT SUM(s.initial_quantity) FROM stock s WHERE s.product_id=p.id),0) initial_stock, "
+        "COALESCE((SELECT SUM(s.damaged_quantity) FROM stock s WHERE s.product_id=p.id),0) damaged_stock, "
+        "COALESCE((SELECT SUM(s.delivered_quantity) FROM stock s WHERE s.product_id=p.id),0) delivered_stock, "
+        "(SELECT MIN(s.alert_threshold) FROM stock s WHERE s.product_id=p.id) alert_threshold, "
+        "(SELECT MAX(s.note) FROM stock s WHERE s.product_id=p.id) stock_note "
+        "FROM products p LEFT JOIN users u ON u.id=p.supplier_client_id "
+        "WHERE p.id=? AND p.is_archived=0" + ownership,
+        params,
+    ).fetchone()
+    if not product:
+        conn.close()
+        flash("Produit introuvable ou accès refusé.", "danger")
+        return redirect(url_for("products.list_products"))
+    stock_levels = conn.execute(
+        "SELECT s.*, w.name warehouse_name FROM stock s JOIN warehouses w ON w.id=s.warehouse_id "
+        "WHERE s.product_id=? ORDER BY w.name", (product_id,)
+    ).fetchall()
+    movements = conn.execute(
+        "SELECT m.*, w.name warehouse_name, u.full_name created_by_name "
+        "FROM stock_movements m JOIN warehouses w ON w.id=m.warehouse_id "
+        "LEFT JOIN users u ON u.id=m.created_by WHERE m.product_id=? "
+        "ORDER BY m.created_at DESC, m.id DESC LIMIT 50", (product_id,)
+    ).fetchall()
+    last_activity = conn.execute(
+        "SELECT MAX(event_time) updated_at FROM ("
+        "SELECT created_at event_time FROM stock_movements WHERE product_id=? "
+        "UNION ALL SELECT created_at FROM audit_log WHERE action='Modification produit' AND details=?"
+        ")",
+        (product_id, f"Produit #{product_id} mis à jour"),
+    ).fetchone()
+    conn.close()
+    purchase_price = None
+    match = re.search(r"prix d'achat\s*:\s*([0-9 ]+)", product["stock_note"] or "", re.IGNORECASE)
+    if match:
+        purchase_price = float(match.group(1).replace(" ", ""))
+    return render_template(
+        "product_detail.html", product=product, stock_levels=stock_levels,
+        movements=movements, purchase_price=purchase_price,
+        last_modified=last_activity["updated_at"] or product["created_at"],
     )
 
 

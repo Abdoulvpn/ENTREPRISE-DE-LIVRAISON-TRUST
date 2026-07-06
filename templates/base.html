@@ -10,6 +10,8 @@
     const saved = localStorage.getItem('trustdelivery_theme');
     const theme = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     document.documentElement.dataset.theme = theme;
+    const savedZoom = Math.min(1.4, Math.max(.8, Number(localStorage.getItem('trustdelivery_zoom')) || 1));
+    document.documentElement.style.setProperty('--td-app-zoom', savedZoom);
   })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -97,6 +99,11 @@
         <div><div class="td-topbar-title">{% block page_title %}{% endblock %}</div><div class="td-topbar-welcome">Bienvenue, {{ current_user.full_name.split(' ')[0] }}</div></div>
       </div>
       <div class="td-topbar-user">
+        <div class="td-zoom-controls" role="group" aria-label="Zoom de l’application">
+          <button type="button" data-zoom-out aria-label="Zoom arrière" title="Zoom arrière"><i class="bi bi-dash-lg"></i></button>
+          <button type="button" data-zoom-reset id="tdZoomValue" aria-label="Réinitialiser le zoom" title="Réinitialiser le zoom">100%</button>
+          <button type="button" data-zoom-in aria-label="Zoom avant" title="Zoom avant"><i class="bi bi-plus-lg"></i></button>
+        </div>
         <div class="td-live-clock" aria-live="polite"><i class="bi bi-clock"></i><span><strong id="tdClock">--:--</strong><small id="tdDate">--</small></span></div>
         <a href="{{ url_for('notifications.index') }}" class="td-notification-button" aria-label="Notifications" title="Notifications">
           <i class="bi bi-bell-fill"></i><span class="td-notification-badge" id="tdNotificationBadge" hidden>0</span>
@@ -125,6 +132,19 @@
     applyTheme(root.dataset.theme || 'light');
     document.querySelectorAll('[data-theme-choice]').forEach((button) => button.addEventListener('click', () => applyTheme(button.dataset.themeChoice)));
     document.querySelectorAll('[data-theme-toggle]').forEach((button) => button.addEventListener('click', () => applyTheme(root.dataset.theme === 'dark' ? 'light' : 'dark')));
+
+    let appZoom = Math.min(1.4, Math.max(.8, Number(localStorage.getItem('trustdelivery_zoom')) || 1));
+    const zoomValue = document.getElementById('tdZoomValue');
+    const applyZoom = (value) => {
+      appZoom = Math.round(Math.min(1.4, Math.max(.8, value)) * 10) / 10;
+      root.style.setProperty('--td-app-zoom', appZoom);
+      localStorage.setItem('trustdelivery_zoom', String(appZoom));
+      if (zoomValue) zoomValue.textContent = `${Math.round(appZoom * 100)}%`;
+    };
+    document.querySelector('[data-zoom-out]')?.addEventListener('click', () => applyZoom(appZoom - .1));
+    document.querySelector('[data-zoom-in]')?.addEventListener('click', () => applyZoom(appZoom + .1));
+    document.querySelector('[data-zoom-reset]')?.addEventListener('click', () => applyZoom(1));
+    applyZoom(appZoom);
 
     const clock = document.getElementById('tdClock');
     const date = document.getElementById('tdDate');

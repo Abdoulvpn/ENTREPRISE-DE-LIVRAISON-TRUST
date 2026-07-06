@@ -122,6 +122,16 @@ ORDER_STATUSES = [
     ("retournee", "Retournée", "#ea580c", 14),
 ]
 
+DEMO_PRODUCTS = (
+    ("Écouteurs Bluetooth NovaPods", "EL-NP200", "Écouteurs sans fil avec boîtier de charge USB-C et autonomie de 24 heures.", "Électronique", "NovaTech Guinée", 145000, 210000, 34, 8),
+    ("Sac à dos urbain Kalo", "MOD-KL45", "Sac imperméable de 25 litres avec compartiment renforcé pour ordinateur 15 pouces.", "Mode & accessoires", "Atelier Kalo", 120000, 185000, 22, 5),
+    ("Coffret soins Karité Nimba", "BEA-KN03", "Coffret composé d'un lait corporel, d'un savon doux et d'un beurre de karité naturel.", "Beauté & bien-être", "Nimba Cosmétique", 85000, 135000, 41, 10),
+    ("Lampe solaire Sira 800", "ENE-SR800", "Lampe rechargeable avec panneau solaire, trois intensités et port USB de secours.", "Énergie solaire", "Sira Énergie", 175000, 260000, 17, 4),
+    ("Thermos inox Fouta 1L", "MAI-FT10", "Bouteille isotherme en acier inoxydable conservant les boissons chaudes ou froides.", "Maison & cuisine", "Fouta Distribution", 95000, 150000, 29, 6),
+    ("Jeu éducatif Alphabet Junior", "ENF-AJ01", "Cartes illustrées lavables pour l'apprentissage du français dès quatre ans.", "Enfants & éducation", "Éditions Djoliba", 45000, 75000, 53, 12),
+    ("Support téléphone moto SafeRide", "AUT-SR12", "Support antichoc réglable avec fixation renforcée pour guidon de moto.", "Auto & moto", "SafeRide Conakry", 70000, 110000, 26, 6),
+)
+
 
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=10)
@@ -565,6 +575,68 @@ def disable_insecure_default_accounts(conn):
         conn.commit()
 
 
+def replace_legacy_demo_products(conn):
+    """Remplace une fois l'ancien catalogue de démonstration, sans toucher au schéma."""
+    legacy_skus = ("PRD-001", "PRD-002", "PRD-003", "PRD-004", "PRD-005")
+    placeholders = ",".join("?" for _ in legacy_skus)
+    legacy = conn.execute(
+        f"SELECT id, sku FROM products WHERE sku IN ({placeholders}) ORDER BY sku", legacy_skus
+    ).fetchall()
+    if len(legacy) != len(legacy_skus):
+        return
+    new_skus = tuple(product[1] for product in DEMO_PRODUCTS)
+    new_placeholders = ",".join("?" for _ in new_skus)
+    if conn.execute(
+        f"SELECT 1 FROM products WHERE sku IN ({new_placeholders}) LIMIT 1", new_skus
+    ).fetchone():
+        return
+    demo_client = conn.execute(
+        "SELECT id FROM users WHERE email='client@trustdelivery.com'"
+    ).fetchone()
+    warehouse = conn.execute("SELECT id FROM warehouses ORDER BY id LIMIT 1").fetchone()
+    if not demo_client or not warehouse:
+        return
+
+    for row, product in zip(legacy, DEMO_PRODUCTS[:len(legacy)]):
+        name, sku, desc, category, supplier, purchase_price, sale_price, qty, threshold = product
+        conn.execute(
+            "UPDATE products SET name=?, sku=?, description=?, category=?, supplier=?, supplier_client_id=?, "
+            "price=?, is_validated=1, is_archived=0 WHERE id=?",
+            (name, sku, desc, category, supplier, demo_client["id"], sale_price, row["id"]),
+        )
+        conn.execute("DELETE FROM stock_movements WHERE product_id=?", (row["id"],))
+        conn.execute("DELETE FROM stock WHERE product_id=?", (row["id"],))
+        conn.execute(
+            "INSERT INTO stock (product_id, warehouse_id, quantity, initial_quantity, alert_threshold, note, visible_seller, is_validated) "
+            "VALUES (?,?,?,?,?,?,1,1)",
+            (row["id"], warehouse["id"], qty, qty, threshold, f"Prix d'achat: {purchase_price} GNF | Lot de démonstration contrôlé"),
+        )
+        conn.execute(
+            "INSERT INTO stock_movements (product_id, warehouse_id, movement_type, quantity, note, created_by) "
+            "VALUES (?,?,?,?,?,?)",
+            (row["id"], warehouse["id"], "entree", qty, "Nouveau stock initial de démonstration", demo_client["id"]),
+        )
+
+    for product in DEMO_PRODUCTS[len(legacy):]:
+        name, sku, desc, category, supplier, purchase_price, sale_price, qty, threshold = product
+        product_id = conn.execute(
+            "INSERT INTO products (name, sku, description, category, supplier, supplier_client_id, price, is_validated) "
+            "VALUES (?,?,?,?,?,?,?,1)",
+            (name, sku, desc, category, supplier, demo_client["id"], sale_price),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO stock (product_id, warehouse_id, quantity, initial_quantity, alert_threshold, note, visible_seller, is_validated) "
+            "VALUES (?,?,?,?,?,?,1,1)",
+            (product_id, warehouse["id"], qty, qty, threshold, f"Prix d'achat: {purchase_price} GNF | Lot de démonstration contrôlé"),
+        )
+        conn.execute(
+            "INSERT INTO stock_movements (product_id, warehouse_id, movement_type, quantity, note, created_by) "
+            "VALUES (?,?,?,?,?,?)",
+            (product_id, warehouse["id"], "entree", qty, "Nouveau stock initial de démonstration", demo_client["id"]),
+        )
+    conn.commit()
+
+
 def ensure_schema(conn):
     user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     if "whatsapp_phone" not in user_columns:
@@ -672,6 +744,7 @@ def ensure_schema(conn):
         "UPDATE order_status_config SET label=? WHERE status_key='proposee'",
         ("Assignée – en attente d’acceptation",),
     )
+    replace_legacy_demo_products(conn)
     conn.commit()
 
 
@@ -712,34 +785,21 @@ def seed(conn):
         cur.execute("INSERT INTO zones (name, region, delivery_fee) VALUES (?,?,?)", (name, region, fee))
 
     # --- Produits de démonstration ---
-    products = [
-        ("Sac de riz 25kg", "PRD-001", "Riz importé qualité supérieure", "Alimentaire", "Fournisseur Soro", 250000),
-        ("Carton huile végétale 12L", "PRD-002", "Huile végétale raffinée", "Alimentaire", "Fournisseur Soro", 180000),
-        ("Pack eau minérale (12 bouteilles)", "PRD-003", "Eau minérale naturelle", "Boissons", "AquaPure", 35000),
-        ("Sac de ciment 50kg", "PRD-004", "Ciment Portland", "Matériaux", "CimGuinée", 95000),
-        ("Carton savon en poudre", "PRD-005", "Lessive en poudre 1kg x10", "Hygiène", "Fournisseur Bah", 60000),
-    ]
-    product_ids = []
-    for name, sku, desc, cat, supplier, price in products:
+    for name, sku, desc, cat, supplier, purchase_price, sale_price, qty, threshold in DEMO_PRODUCTS:
         cur.execute(
             """INSERT INTO products (name, sku, description, category, supplier, supplier_client_id, price, is_validated)
                VALUES (?,?,?,?,?,?,?,1)""",
-            (name, sku, desc, cat, supplier, demo_client_id, price),
+            (name, sku, desc, cat, supplier, demo_client_id, sale_price),
         )
-        product_ids.append(cur.lastrowid)
-
-    import random
-
-    for pid in product_ids:
-        qty = random.randint(3, 80)
+        pid = cur.lastrowid
         cur.execute(
-            "INSERT INTO stock (product_id, warehouse_id, quantity, alert_threshold) VALUES (?,?,?,?)",
-            (pid, warehouse_id, qty, 10),
+            "INSERT INTO stock (product_id, warehouse_id, quantity, initial_quantity, alert_threshold, note, visible_seller, is_validated) VALUES (?,?,?,?,?,?,1,1)",
+            (pid, warehouse_id, qty, qty, threshold, f"Prix d'achat: {purchase_price} GNF | Lot de démonstration contrôlé"),
         )
         cur.execute(
             """INSERT INTO stock_movements (product_id, warehouse_id, movement_type, quantity, note, created_by, created_at)
                VALUES (?,?,?,?,?,?,?)""",
-            (pid, warehouse_id, "entree", qty, "Stock initial", demo_client_id, datetime.now().isoformat()),
+            (pid, warehouse_id, "entree", qty, "Réception du stock initial de démonstration", demo_client_id, datetime.now().isoformat()),
         )
 
     conn.commit()

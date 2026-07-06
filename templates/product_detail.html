@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} — TrustDelivery{% endblock %}
+{% block page_title %}Détails du produit{% endblock %}
+{% block content %}
+
+<a href="{{ url_for('products.list_products') }}" class="td-muted" style="font-size:13px;">← Retour aux produits</a>
+
+<div class="td-product-detail-hero mt-3 mb-3">
+  <div class="td-product-detail-title">
+    {% if product.photo %}<img src="{{ url_for('static', filename=product.photo) }}" alt="{{ product.name }}">{% else %}<span class="td-product-placeholder"><i class="bi bi-box-seam"></i></span>{% endif %}
+    <div>
+      <div class="td-muted" style="font-size:12px;">{{ product.category or 'Sans catégorie' }} · {{ product.sku }}</div>
+      <h3>{{ product.name }}</h3>
+      {% if product.total_stock == 0 %}
+        <span class="td-badge" style="background:#dc2626;">Rupture de stock</span>
+      {% elif product.alert_threshold is not none and product.total_stock <= product.alert_threshold %}
+        <span class="td-badge" style="background:#f59e0b;">Stock faible</span>
+      {% else %}
+        <span class="td-badge" style="background:#16a34a;">En stock</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if current_user.role in ['super_admin','moderateur','client'] %}
+      <a href="{{ url_for('products.edit_product', product_id=product.id) }}" class="btn td-btn-outline"><i class="bi bi-pencil"></i> Modifier</a>
+    {% endif %}
+    {% if current_user.role in ['super_admin','moderateur'] %}
+      <a href="{{ url_for('products.stock_movements', product_id=product.id) }}" class="btn td-btn-primary"><i class="bi bi-plus-circle"></i> Ajouter du stock</a>
+      <a href="#historique" class="btn td-btn-outline"><i class="bi bi-clock-history"></i> Voir l’historique</a>
+      <form method="post" action="{{ url_for('products.delete_product', product_id=product.id) }}" onsubmit="return confirm('Supprimer ce produit du catalogue ? Son historique sera conservé.');">
+        <button class="btn btn-outline-danger"><i class="bi bi-trash"></i> Supprimer</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-8">
+    <div class="td-card h-100">
+      <h6 class="mb-3">Informations du produit</h6>
+      <div class="td-product-facts">
+        <div><span>Nom</span><strong>{{ product.name }}</strong></div>
+        <div><span>Référence</span><strong>{{ product.sku }}</strong></div>
+        <div><span>Catégorie</span><strong>{{ product.category or 'Non renseignée' }}</strong></div>
+        <div><span>Fournisseur</span><strong>{{ product.supplier or product.supplier_client_name or 'Non renseigné' }}</strong></div>
+        <div><span>Prix d’achat</span><strong>{{ purchase_price | money if purchase_price is not none else 'Non renseigné' }}</strong></div>
+        <div><span>Prix de vente</span><strong>{{ product.price | money }}</strong></div>
+        <div><span>Date d’ajout</span><strong>{{ product.created_at | dt }}</strong></div>
+        <div><span>Dernière modification</span><strong>{{ last_modified | dt }}</strong></div>
+      </div>
+      <hr class="td-divider">
+      <span class="td-muted" style="font-size:12px;">DESCRIPTION</span>
+      <p class="mb-0 mt-1">{{ product.description or 'Aucune description.' }}</p>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="td-card h-100">
+      <h6 class="mb-3">État du stock</h6>
+      <div class="td-stock-total">{{ product.total_stock }} <small>unités disponibles</small></div>
+      <div class="td-product-facts td-product-facts-single mt-3">
+        <div><span>Quantité initiale</span><strong>{{ product.initial_stock }}</strong></div>
+        <div><span>Quantité livrée</span><strong>{{ product.delivered_stock }}</strong></div>
+        <div><span>Quantité endommagée</span><strong>{{ product.damaged_stock }}</strong></div>
+        <div><span>Seuil d’alerte</span><strong>{{ product.alert_threshold if product.alert_threshold is not none else '—' }}</strong></div>
+      </div>
+      {% for stock in stock_levels %}<div class="d-flex justify-content-between border-top pt-2 mt-2"><span class="td-muted">{{ stock.warehouse_name }}</span><strong>{{ stock.quantity }}</strong></div>{% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="td-card" id="historique">
+  <h6 class="mb-3">Historique des mouvements de stock</h6>
+  <div class="td-table-wrap">
+    <table class="td-table">
+      <thead><tr><th>Date</th><th>Entrepôt</th><th>Type</th><th>Quantité</th><th>Note</th><th>Enregistré par</th></tr></thead>
+      <tbody>
+      {% for movement in movements %}
+        <tr>
+          <td>{{ movement.created_at | dt }}</td><td>{{ movement.warehouse_name }}</td>
+          <td><span class="td-badge" style="background:{{ '#16a34a' if movement.movement_type == 'entree' else '#dc2626' }};">{{ 'Entrée' if movement.movement_type == 'entree' else 'Sortie' }}</span></td>
+          <td>{{ movement.quantity }}</td><td>{{ movement.note or '—' }}</td><td>{{ movement.created_by_name or 'Système' }}</td>
+        </tr>
+      {% else %}<tr><td colspan="6" class="td-empty">Aucun mouvement enregistré.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

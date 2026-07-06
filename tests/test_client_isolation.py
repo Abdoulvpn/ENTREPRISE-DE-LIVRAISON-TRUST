@@ -156,6 +156,40 @@ class ClientIsolationTests(unittest.TestCase):
         self.assertGreater(stock_count, 0)
         self.assertGreater(movement_count, 0)
 
+    def test_demo_catalog_uses_new_realistic_products(self):
+        conn = get_db()
+        legacy_count = conn.execute(
+            "SELECT COUNT(*) count FROM products WHERE sku IN ('PRD-001','PRD-002','PRD-003','PRD-004','PRD-005')"
+        ).fetchone()["count"]
+        demo = conn.execute(
+            "SELECT p.id, p.name, p.category, p.price, s.quantity, s.alert_threshold, s.note "
+            "FROM products p JOIN stock s ON s.product_id=p.id WHERE p.sku='EL-NP200'"
+        ).fetchone()
+        conn.close()
+        self.assertEqual(legacy_count, 0)
+        self.assertEqual(demo["name"], "Écouteurs Bluetooth NovaPods")
+        self.assertEqual(demo["category"], "Électronique")
+        self.assertEqual(demo["price"], 210000)
+        self.assertEqual(demo["quantity"], 34)
+        self.assertEqual(demo["alert_threshold"], 8)
+        self.assertIn("Prix d'achat", demo["note"])
+
+    def test_product_detail_shows_stock_history_and_actions(self):
+        conn = get_db()
+        product_id = conn.execute("SELECT id FROM products WHERE sku='EL-NP200'").fetchone()["id"]
+        conn.close()
+        response = self.logged_client(self.admin_id).get(f"/produits/{product_id}?_tab=test-tab")
+        self.assertEqual(response.status_code, 200)
+        for label in ("Prix d’achat", "Prix de vente", "Seuil d’alerte", "Historique des mouvements", "Ajouter du stock"):
+            self.assertIn(label.encode(), response.data)
+
+    def test_global_zoom_controls_are_available(self):
+        response = self.logged_client(self.admin_id).get("/dashboard?_tab=test-tab")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-zoom-out", response.data)
+        self.assertIn(b"data-zoom-in", response.data)
+        self.assertIn(b"trustdelivery_zoom", response.data)
+
     def test_database_backup_is_valid_and_reset_is_blocked(self):
         backup_path = backup_database(force=True)
         self.assertTrue(os.path.exists(backup_path))

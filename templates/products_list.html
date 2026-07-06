@@ -31,7 +31,7 @@
     <tbody>
     {% for p in products %}
       <tr>
-        <td><div class="d-flex align-items-center gap-2">{% if p.photo %}<img src="{{ url_for('static',filename=p.photo) }}" class="td-product-thumb" alt="">{% endif %}<div><strong>{{ p.name }}</strong>{% if p.description %}<br><span class="td-muted">{{ p.description|truncate(55) }}</span>{% endif %}{% if p.stock_note %}<br><small>Note : {{ p.stock_note|truncate(45) }}</small>{% endif %}{% if p.link %}<br><a href="{{ p.link }}" target="_blank" rel="noopener">Lien produit</a>{% endif %}</div></div></td>
+        <td><a href="{{ url_for('products.product_detail', product_id=p.id) }}" class="td-product-list-link"><div class="d-flex align-items-center gap-2">{% if p.photo %}<img src="{{ url_for('static',filename=p.photo) }}" class="td-product-thumb" alt="">{% endif %}<div><strong>{{ p.name }}</strong>{% if p.description %}<br><span class="td-muted">{{ p.description|truncate(55) }}</span>{% endif %}{% if p.stock_note %}<br><small>Note : {{ p.stock_note|truncate(45) }}</small>{% endif %}</div></div></a>{% if p.link %}<br><a href="{{ p.link }}" target="_blank" rel="noopener">Lien produit</a>{% endif %}</td>
         <td>{{ p.sku }}</td>
         {% if current_user.role != 'client' %}<td>{{ p.supplier_client_name or 'Non attribué' }}</td>{% endif %}
         <td>{{ p.qte_initiale }}</td><td>{{ p.qte_endommagee }}</td><td>{{ p.qte_livree }}</td>
@@ -44,10 +44,11 @@
         </td>
         <td><span title="Produit validé">{{ '🔔' if p.is_validated else '🔕' }}</span></td><td><span title="{{ 'Visible aux confirmateurs' if p.visible_seller else 'Masqué aux confirmateurs' }}">{{ '🔔' if p.visible_seller else '🔕' }}</span></td>
         <td>
+          <a href="{{ url_for('products.product_detail', product_id=p.id) }}" class="td-btn-primary btn btn-sm">Détails</a>
           {% if current_user.role in ['super_admin','moderateur','client'] %}
-            <a href="{{ url_for('products.edit_product', product_id=p.id) }}" class="td-btn-outline btn btn-sm" title="Modifier">✎</a>
-            {% if current_user.role in ['super_admin','moderateur'] %}<a href="{{ url_for('products.stock_movements', product_id=p.id) }}" class="td-btn-outline btn btn-sm">Détail &amp; historique</a>
-            <form method="post" action="{{ url_for('products.delete_product', product_id=p.id) }}" class="d-inline" onsubmit="return confirm('Archiver ce produit en conservant son historique ?')"><button class="btn btn-sm btn-outline-danger">Archiver</button></form>{% endif %}
+            <a href="{{ url_for('products.edit_product', product_id=p.id) }}" class="td-btn-outline btn btn-sm">Modifier</a>
+            {% if current_user.role in ['super_admin','moderateur'] %}<a href="{{ url_for('products.stock_movements', product_id=p.id) }}" class="td-btn-outline btn btn-sm">Ajouter du stock</a>
+            <form method="post" action="{{ url_for('products.delete_product', product_id=p.id) }}" class="d-inline" onsubmit="return confirm('Supprimer ce produit du catalogue ? Son historique sera conservé.')"><button class="btn btn-sm btn-outline-danger">Supprimer</button></form>{% endif %}
           {% else %}
             <span class="td-muted">Lecture seule</span>
           {% endif %}
