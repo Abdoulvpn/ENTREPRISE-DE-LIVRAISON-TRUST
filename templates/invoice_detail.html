@@ -2,54 +2,14 @@
 {% block title %}Facture {{ invoice.invoice_number }} — TrustDelivery{% endblock %}
 {% block page_title %}Facture {{ invoice.invoice_number }}{% endblock %}
 {% block content %}
-
 <a href="{{ url_for('invoices.list_invoices') }}" class="td-muted" style="font-size:13px;">← Retour aux factures</a>
-
-<div class="td-card mt-2" style="max-width:640px;">
-  <div class="d-flex justify-content-between align-items-start mb-4">
-    <div>
-      <img src="{{ url_for('static', filename='img/logo-3d-small.png') }}" alt="TrustDelivery" class="td-invoice-logo td-logo-3d">
-    </div>
-    <div class="text-end">
-      <h5 class="mb-1">{{ invoice.invoice_number }}</h5>
-      <span class="td-badge" style="background:{{ '#16a34a' if invoice.status=='payee' else '#dc2626' }}">{{ 'Payée' if invoice.status=='payee' else 'Impayée' }}</span>
-    </div>
-  </div>
-
-  <div class="row mb-4">
-    <div class="col-6">
-      <p class="td-muted mb-1" style="font-size:12.5px;">FACTURÉ À</p>
-      <p class="mb-0">{{ invoice.client_name }}<br><span class="td-muted">{{ invoice.client_email }}</span></p>
-    </div>
-    <div class="col-6 text-end">
-      <p class="td-muted mb-1" style="font-size:12.5px;">COMMANDE LIÉE</p>
-      <p class="mb-0">{{ invoice.order_number }}<br><span class="td-muted">{{ invoice.delivery_address }}</span></p>
-    </div>
-  </div>
-
-  <div class="row mb-4">
-    <div class="col-12">
-      <p class="td-muted mb-1" style="font-size:12.5px;">DESTINATAIRE</p>
-      <p class="mb-0">{{ invoice.recipient_name or invoice.client_name }}{% if invoice.recipient_phone %}<br><span class="td-muted">{{ invoice.recipient_phone }}</span>{% endif %}</p>
-    </div>
-  </div>
-
-  <table class="td-table mb-3">
-    <thead><tr><th>Produit</th><th>Qté</th><th>Total</th></tr></thead>
-    <tbody>
-    {% for it in items %}
-      <tr><td>{{ it.product_name }}</td><td>{{ it.quantity }}</td><td>{{ (it.unit_price*it.quantity) | money }}</td></tr>
-    {% endfor %}
-      <tr><td colspan="2" class="text-end"><strong>Total</strong></td><td><strong>{{ invoice.order_total | money }}</strong></td></tr>
-    </tbody>
-  </table>
-
-  <p class="td-muted" style="font-size:13px;">Émise le {{ invoice.created_at | dt }}{% if invoice.paid_at %} · Payée le {{ invoice.paid_at | dt }}{% endif %}</p>
-
-  {% if invoice.status != 'payee' and current_user.role in ['super_admin','moderateur'] %}
-  <form method="post" action="{{ url_for('invoices.mark_paid', invoice_id=invoice.id) }}">
-    <button type="submit" class="btn td-btn-primary">Marquer comme payée</button>
-  </form>
-  {% endif %}
+<div class="td-card mt-2" style="max-width:850px;">
+  <div class="d-flex justify-content-between align-items-start mb-4"><img src="{{ url_for('static', filename='img/logo-3d-small.png') }}" alt="TrustDelivery" class="td-invoice-logo td-logo-3d"><div class="text-end"><h5>{{ invoice.invoice_number }}</h5><span class="td-badge" style="background:{{ '#16a34a' if invoice.status=='payee' else '#dc2626' }}">{{ 'Versée' if invoice.status=='payee' else 'Non versée' }}</span> <span class="td-badge" style="background:{{ '#0ea5e9' if invoice.is_closed else '#64748b' }}">{{ 'Clôturée' if invoice.is_closed else 'Ouverte' }}</span></div></div>
+  <div class="row mb-4"><div class="col-6"><p class="td-muted mb-1" style="font-size:12.5px;">FOURNISSEUR</p><p>{{ invoice.client_name }}<br><span class="td-muted">{{ invoice.client_email }}</span></p></div><div class="col-6 text-end"><p class="td-muted mb-1" style="font-size:12.5px;">COMMANDES LIÉES</p><strong>{{ invoice.order_count }} commande(s)</strong></div></div>
+  <table class="td-table mb-4"><thead><tr><th>Commande</th><th>Destinataire</th><th>Date livraison</th><th>Montant</th></tr></thead><tbody>{% for o in orders %}<tr><td><a href="{{ url_for('orders.order_detail', order_id=o.id) }}">{{ o.order_number }}</a></td><td>{{ o.recipient_name }}</td><td>{{ o.delivered_at | dt }}</td><td>{{ o.total_amount | money }}</td></tr>{% endfor %}<tr><td colspan="3" class="text-end"><strong>Sous-total commandes</strong></td><td><strong>{{ invoice.amount | money }}</strong></td></tr></tbody></table>
+  <h6>Messages et charges supplémentaires</h6>
+  {% if current_user.role in ['super_admin','moderateur'] %}<form method="post" action="{{ url_for('invoices.add_message', invoice_id=invoice.id) }}" class="row g-2 mb-3"><div class="col-md-7"><input name="message" class="form-control" placeholder="Ex. Dédouanement effectué" required></div><div class="col-md-3"><input name="amount" type="number" step="0.01" class="form-control" placeholder="Montant (GNF)" value="0"></div><div class="col-md-2"><button class="btn td-btn-primary w-100">Ajouter</button></div></form>{% endif %}
+  <table class="td-table mb-3"><thead><tr><th>Message</th><th>Auteur / Date</th><th>Montant</th></tr></thead><tbody>{% for m in messages %}<tr><td>{{ m.message }}</td><td class="td-muted">{{ m.author or 'Système' }} · {{ m.created_at | dt }}</td><td>{{ m.amount | money }}</td></tr>{% else %}<tr><td colspan="3" class="td-empty">Aucun message supplémentaire.</td></tr>{% endfor %}<tr><td colspan="2" class="text-end"><strong>Total facture</strong></td><td><strong>{{ invoice.grand_total | money }}</strong></td></tr></tbody></table>
+  <p class="td-muted" style="font-size:13px;">Émise le {{ invoice.created_at | dt }}{% if invoice.closed_at %} · Clôturée le {{ invoice.closed_at | dt }}{% endif %}{% if invoice.paid_at %} · Versée le {{ invoice.paid_at | dt }}{% endif %}</p>
 </div>
 {% endblock %}

@@ -489,7 +489,10 @@ def order_detail(order_id):
         livreurs = conn.execute(
             "SELECT * FROM users WHERE role='livreur' AND is_active=1 ORDER BY full_name"
         ).fetchall()
-    invoice = conn.execute("SELECT * FROM invoices WHERE order_id=?", (order_id,)).fetchone()
+    invoice = conn.execute(
+        "SELECT i.* FROM invoices i JOIN invoice_orders io ON io.invoice_id=i.id WHERE io.order_id=?",
+        (order_id,),
+    ).fetchone()
     statuses = conn.execute("SELECT * FROM order_status_config ORDER BY sort_order").fetchall()
     last_location = conn.execute(
         "SELECT latitude, longitude, accuracy, recorded_at FROM courier_locations "
@@ -722,14 +725,20 @@ def update_delivery_status(order_id):
             stock_row = conn.execute("SELECT id FROM stock WHERE product_id=? ORDER BY id LIMIT 1", (item["product_id"],)).fetchone()
             if stock_row:
                 conn.execute("UPDATE stock SET delivered_quantity=delivered_quantity+? WHERE id=?", (item["quantity"], stock_row["id"]))
-        invoice_number = generate_invoice_number(conn)
         amount = order["total_amount"]
-        conn.execute(
-            "INSERT INTO invoices (invoice_number, order_id, client_id, amount, status) VALUES (?,?,?,?,'impayee')",
-            (invoice_number, order_id, order["client_id"], amount),
-        )
-        pending_log = ("Livraison terminée", f"{order['order_number']} — facture {invoice_number} générée")
-        flash_msg = (f"Commande marquée comme livrée. Facture {invoice_number} générée automatiquement.", "success")
+        invoice = conn.execute("SELECT * FROM invoices WHERE client_id=? AND is_closed=0 ORDER BY created_at DESC LIMIT 1", (order["client_id"],)).fetchone()
+        if invoice:
+            invoice_number, invoice_id = invoice["invoice_number"], invoice["id"]
+            conn.execute("UPDATE invoices SET amount=amount+? WHERE id=?", (amount, invoice_id))
+        else:
+            invoice_number = generate_invoice_number(conn)
+            invoice_id = conn.execute(
+                "INSERT INTO invoices (invoice_number, order_id, client_id, amount, status) VALUES (?,?,?,?,'impayee')",
+                (invoice_number, order_id, order["client_id"], amount),
+            ).lastrowid
+        conn.execute("INSERT OR IGNORE INTO invoice_orders (invoice_id, order_id) VALUES (?,?)", (invoice_id, order_id))
+        pending_log = ("Livraison terminée", f"{order['order_number']} — ajoutée à la facture {invoice_number}")
+        flash_msg = (f"Commande marquée comme livrée et ajoutée à la facture {invoice_number}.", "success")
     elif new_status == "retournee":
         conn.execute("UPDATE orders SET status='retournee' WHERE id=?", (order_id,))
         conn.execute("UPDATE courier_stock SET status='retourne' WHERE order_id=?", (order_id,))

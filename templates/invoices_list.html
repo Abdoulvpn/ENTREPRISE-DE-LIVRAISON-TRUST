@@ -2,45 +2,14 @@
 {% block title %}Facturation — TrustDelivery{% endblock %}
 {% block page_title %}{{ 'Mes factures' if current_user.role=='client' else 'Facturation' }}{% endblock %}
 {% block content %}
-
-<div class="td-kpi-grid" style="max-width:340px;">
-  <div class="td-kpi red">
-    <div class="td-kpi-label">Total impayé</div>
-    <div class="td-kpi-value">{{ total_impaye | money }}</div>
-  </div>
-</div>
-
-<div class="td-section-title">
-  <span>{{ invoices | length }} facture(s)</span>
-  {% if current_user.role in ['super_admin','moderateur'] %}
-  <a href="{{ url_for('invoices.export_invoices') }}" class="btn td-btn-outline btn-sm">⭳ Exporter en CSV</a>
-  {% endif %}
-</div>
-
-<div class="td-table-wrap">
-  <table class="td-table">
-    <thead>
-      <tr>
-        <th>N° Facture</th><th>Commande</th>
-        {% if current_user.role != 'client' %}<th>Client</th>{% endif %}
-        <th>Montant</th><th>Statut</th><th>Date</th><th></th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for i in invoices %}
-      <tr>
-        <td>{{ i.invoice_number }}</td>
-        <td>{{ i.order_number }}</td>
-        {% if current_user.role != 'client' %}<td>{{ i.client_name }}</td>{% endif %}
-        <td>{{ i.display_amount | money }}</td>
-        <td><span class="td-badge" style="background:{{ '#16a34a' if i.status=='payee' else '#dc2626' }}">{{ 'Payée' if i.status=='payee' else 'Impayée' }}</span></td>
-        <td class="td-muted">{{ i.created_at | dt }}</td>
-        <td><a href="{{ url_for('invoices.invoice_detail', invoice_id=i.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td>
-      </tr>
-    {% else %}
-      <tr><td colspan="7" class="td-empty">Aucune facture pour le moment.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</div>
+<div class="td-kpi-grid" style="max-width:340px;"><div class="td-kpi red"><div class="td-kpi-label">Total non versé</div><div class="td-kpi-value">{{ total_impaye | money }}</div></div></div>
+<div class="td-section-title"><span>{{ invoices | length }} facture(s)</span>{% if current_user.role in ['super_admin','moderateur'] %}<a href="{{ url_for('invoices.export_invoices') }}" class="btn td-btn-outline btn-sm">⭳ Exporter en CSV</a>{% endif %}</div>
+<div class="td-table-wrap"><table class="td-table"><thead><tr><th>N° Facture</th><th>Nb. commandes</th>{% if current_user.role != 'client' %}<th>Fournisseur</th>{% endif %}<th>Montant</th><th>Clôturée</th><th>Versée</th><th>Date</th><th></th></tr></thead><tbody>
+{% for i in invoices %}<tr>
+<td>{{ i.invoice_number }}</td><td><strong>{{ i.order_count }}</strong></td>{% if current_user.role != 'client' %}<td>{{ i.client_name }}</td>{% endif %}<td>{{ i.display_amount | money }}</td>
+<td>{% if current_user.role in ['super_admin','moderateur'] %}<form method="post" action="{{ url_for('invoices.toggle_closed', invoice_id=i.id) }}"><button class="btn btn-sm {{ 'btn-success' if i.is_closed else 'btn-secondary' }}" title="Aucune nouvelle commande ne sera ajoutée après clôture">{{ '✓ Oui' if i.is_closed else 'Non' }}</button></form>{% else %}{{ 'Oui' if i.is_closed else 'Non' }}{% endif %}</td>
+<td>{% if current_user.role in ['super_admin','moderateur'] %}<form method="post" action="{{ url_for('invoices.mark_paid', invoice_id=i.id) }}"><button class="btn btn-sm {{ 'btn-success' if i.status=='payee' else 'btn-secondary' }}">{{ '✓ Oui' if i.status=='payee' else 'Non' }}</button></form>{% else %}{{ 'Oui' if i.status=='payee' else 'Non' }}{% endif %}</td>
+<td class="td-muted">{{ i.created_at | dt }}</td><td><a href="{{ url_for('invoices.invoice_detail', invoice_id=i.id) }}" class="td-btn-outline btn btn-sm">Voir</a></td></tr>
+{% else %}<tr><td colspan="8" class="td-empty">Aucune facture pour le moment.</td></tr>{% endfor %}
+</tbody></table></div>
 {% endblock %}

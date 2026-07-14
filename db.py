@@ -359,6 +359,22 @@ def init_db(reset=False):
             paid_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS invoice_orders (
+            invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+            order_id INTEGER NOT NULL UNIQUE REFERENCES orders(id),
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (invoice_id, order_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS invoice_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+            message TEXT NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            created_by INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS shop_connections (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_id INTEGER NOT NULL REFERENCES users(id),
@@ -699,6 +715,14 @@ def ensure_schema(conn):
         conn.execute("ALTER TABLE shop_connections ADD COLUMN status_callback_url TEXT")
     if "auto_dispatch" not in connection_columns:
         conn.execute("ALTER TABLE shop_connections ADD COLUMN auto_dispatch INTEGER NOT NULL DEFAULT 1")
+    invoice_columns = {row["name"] for row in conn.execute("PRAGMA table_info(invoices)").fetchall()}
+    if "is_closed" not in invoice_columns:
+        conn.execute("ALTER TABLE invoices ADD COLUMN is_closed INTEGER NOT NULL DEFAULT 0")
+    if "closed_at" not in invoice_columns:
+        conn.execute("ALTER TABLE invoices ADD COLUMN closed_at TEXT")
+    conn.execute("CREATE TABLE IF NOT EXISTS invoice_orders (invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE, order_id INTEGER NOT NULL UNIQUE REFERENCES orders(id), created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (invoice_id, order_id))")
+    conn.execute("CREATE TABLE IF NOT EXISTS invoice_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE, message TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0, created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))")
+    conn.execute("INSERT OR IGNORE INTO invoice_orders (invoice_id, order_id) SELECT id, order_id FROM invoices")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_courier_locations_order_time "
         "ON courier_locations(order_id, recorded_at DESC)"

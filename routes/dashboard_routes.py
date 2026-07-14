@@ -23,8 +23,8 @@ def index():
             "SELECT * FROM orders WHERE client_id = ? ORDER BY created_at DESC LIMIT 10", (g.user["id"],)
         ).fetchall()
         invoices = conn.execute(
-            "SELECT i.*, o.total_amount as display_amount FROM invoices i "
-            "JOIN orders o ON o.id=i.order_id WHERE i.client_id = ? ORDER BY i.created_at DESC LIMIT 10",
+            "SELECT i.*, i.amount + COALESCE((SELECT SUM(amount) FROM invoice_messages WHERE invoice_id=i.id),0) display_amount "
+            "FROM invoices i WHERE i.client_id = ? ORDER BY i.created_at DESC LIMIT 10",
             (g.user["id"],),
         ).fetchall()
         stats = {
